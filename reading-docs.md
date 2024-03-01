@@ -1,18 +1,18 @@
-
-
 # Projekt BCNB
-The Early Breast Cancer Core-Needle Biopsy WSI (BCNB)
-1058 wsi (x200)
-Masks + Clinical data
+### The Early Breast Cancer Core-Needle Biopsy WSI (BCNB)
+
+To jest projekt z którego użyjemy dane do pierwszych eksperymentów - 1058 wsi (x200) - Masks + Clinical data
+
+Tutaj są informacje o projekcie:
 - https://bupt-ai-cz.github.io/BCNB/
 
 Publikacja do tego zbioru
 - https://www.frontiersin.org/journals/oncology/articles/10.3389/fonc.2021.759007/full
 
-Link do danych (sprawdzić czy działa dla  
+Link do danych (sprawdzić czy działa dla Aleksandry i Kuby)
 - https://drive.google.com/drive/folders/1PnZ1kND4bjnKaD6VxSdD7dZFB3upUke_
 
-# Postawy histop - deep learning
+# Podstawy deep learning w histopatologi
 - https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4977982/
 
 # Przegląd literatury
