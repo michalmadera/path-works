@@ -1,0 +1,9 @@
+
+Rozpoznawanie HER2 na podstawie obrazów H&E. 
+
+https://alivia.org.pl/wiedza-o-raku/nieluminalny-her2-dodatni-rak-piersi-wczesna-diagnoza-ma-znaczenie/
+
+1. Na podstawie diagnozy patologa spróbować wykonać klasyfikację czy na danym WSI jest rak piersi HER2.
+2. Wykonać segmentację obszarów rakowych
+3. Dla obszarów rakowych wykonać klasyfikację czy jest HER2
+

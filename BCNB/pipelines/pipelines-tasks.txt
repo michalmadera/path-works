@@ -1,0 +1,16 @@
+SNAKEMAKE
+
+1. Uruchomić przykładowe zadania z użyciem snakemake i przedstawić zespołowi
+- to moga być najbardziej podstawowe operacje na niewielkich obrazach (podział na tiles, zapisanie tylko tiles bez tła, zapisanie pliku csv - aby powrócic do oryginlnego obrazu, połączenie w jeden obraz na podstawie tiles)
+
+2. Uruchomić podstawowy pipeline do segmentacji WSI (BCNB)
+- najlepiej na WSL i nie w dedykowanym dockerze snakemake
+
+3. Uruchomić w infrastrukturze GPU na superkompie
+- przygotować skrypty do pobierania z github i uruchamiania obliczeń
+
+
+Dodatkowe
+
+Sprawdzić czy to może być przydatne do fazy pre-processingu obrazów (rozdzielanie tła od tkanki, dzielenie na tiles, normalizacja)
+https://www.dask.org/

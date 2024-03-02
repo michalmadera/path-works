@@ -1,0 +1,7 @@
+
+SEGMENTACJA
+
+1. Poskładać wynik segmentacji, którym jest maksa (poszarpana), w cały obraz, który można nałożyć na oryginalny WSI. Będzie to wymagało zapisania pliku csv (lub jakiejś innej metody).
+2. Nałożyć maksę w taki sposób aby kolor czarny był całkowicie transparentny, a obszar maski był zielony z przezroczystością (80%).
+3. Wykonać filtr wygładzający krawedzie na masce z segmentacji (poszarpanej) tak aby była możliwość wygenerowania geometrii otaczającej maskę. Sprawdzić gotowe rozwiazania.
+4. 
