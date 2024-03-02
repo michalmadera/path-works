@@ -1,0 +1,20 @@
+
+Spotkania 19:00 w środy (wstepnie)
+
+Pending
+- Uruchomienie środowisk programistycznych [O, K, M]
+- Wizualizacja masek [O, K, M]
+
+
+
+
+Backlog
+- poskładanie wyników segmentacji tiles w jeden obraz WSI+maska
+- uruchomienie segmentacji dla wszystkich danych
+- obiczenie dokładności segmentacji
+- warianty algorytmu i zestawienie wyników
+- uruchomienie snakemake
+- uruchomienie testów na superkomp GPU za pomocą github
+- dodanie VGG-16 do arch sieci
+
+
