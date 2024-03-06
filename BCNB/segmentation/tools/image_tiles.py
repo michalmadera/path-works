@@ -71,13 +71,63 @@ def split_image_into_tiles(image_path, tiles_folder, image_mask_path, mask_tiles
     # cv2.destroyAllWindows()
 
 
+def split_image_into_tiles_with_background(image_path, tiles_folder, image_mask_path, mask_tiles_folder,
+                                           tile_width, tile_height):
+    """
+    Split an image into tiles and save them in a folder.
+
+    :param mask_tiles_folder:
+    :param image_mask_path:
+    :param image_path: The path to the image to split
+    :param tiles_folder: The folder to save the tiles.
+    :param tile_width: The width of the tiles in pixels.
+    :param tile_height: The height of the tiles in pixels.
+    """
+    # Load the main image
+    img = Image.open(image_path)
+    img_mask = Image.open(image_mask_path)
+    img_width, img_height = img.size
+
+    mask = extract_tissue_mask(image_path)
+    disp_mask = np.copy(mask)
+
+    # Calculate the number of tiles in each dimension
+    x_tiles = img_width // tile_width
+    y_tiles = img_height // tile_height
+
+    # Split the image into tiles and save them
+    index = 1
+    for x in range(x_tiles):
+        for y in range(y_tiles):
+            # Define the box to crop
+            left = x * tile_width
+            upper = y * tile_height
+            right = left + tile_width
+            lower = upper + tile_height
+            box = (left, upper, right, lower)
+
+            # Crop the image to create the tile
+            tile = img.crop(box)
+            mask_tile = img_mask.crop(box)
+
+            mask_area = mask[box[1]:box[3], box[0]:box[2]]
+
+            save_tile(image_path, index, tile, tiles_folder)
+            save_tile(image_mask_path, index, mask_tile, mask_tiles_folder, extension=".png")
+            # print(f"Tile saved to '{os.path.splitext(os.path.basename(image_path))[0]}.{index}.jpg, "
+            #       f"ratio: {content_area:.2f}")
+
+            index += 1
+
+
 def save_tile(image_path, index, tile, tiles_folder, extension=".jpg"):
     tile_filename = f"{os.path.splitext(os.path.basename(image_path))[0]}.{index}{extension}"
     full_tile_filename = os.path.join(tiles_folder, tile_filename)
     tile.save(full_tile_filename)
 
 
-def split_to_tiles(images_folder, tiles_folder, masks_folder, mask_tile_folder, tile_width, tile_height, tissue_ratio_threshold=.3):
+def split_to_tiles(images_folder, tiles_folder, masks_folder, mask_tile_folder, tile_width, tile_height,
+                   tissue_ratio_threshold=.3):
     """
     Split all images in a folder into tiles and save them in another folder.
 
@@ -99,6 +149,7 @@ def split_to_tiles(images_folder, tiles_folder, masks_folder, mask_tile_folder, 
 
 
 if __name__ == '__main__':
+    split_image_into_tiles_with_background(("../wsi-segment/images/1.jpg", "../wsi-segment/test_tiles", "../wsi-segment/masks/1.jpg", "../wsi-segment/test_mask_tiles", 256, 256))
     split_to_tiles('../wsi-segment/images', '../wsi-segment/image-tiles',
                    '../wsi-segment/masks', '../wsi-segment/mask-tiles',
                    256, 256)
