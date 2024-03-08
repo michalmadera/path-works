@@ -2,6 +2,7 @@ import os
 import numpy as np
 from PIL import Image
 import cv2
+import pandas as pd
 
 Image.MAX_IMAGE_PIXELS = None
 
@@ -41,6 +42,7 @@ def split_image_into_tiles(image_path, tiles_folder, image_mask_path, mask_tiles
 
     # Split the image into tiles and save them
     index = 1
+    df = pd.DataFrame()
     for x in range(x_tiles):
         for y in range(y_tiles):
             # Define the box to crop
@@ -61,10 +63,13 @@ def split_image_into_tiles(image_path, tiles_folder, image_mask_path, mask_tiles
                 # print(index, x, y, box, f"{content_area:.2f}")
                 save_tile(image_path, index, tile, tiles_folder)
                 save_tile(image_mask_path, index, mask_tile, mask_tiles_folder, extension=".png")
+                df = pd.concat([df, pd.DataFrame([{"slide_id": "../"+image_path, "tile_id": index, "tile_x": left, "tile_y": upper, "tile_height": tile_height, "tile_width": tile_width}])], ignore_index=True)
                 # print(f"Tile saved to '{os.path.splitext(os.path.basename(image_path))[0]}.{index}.jpg, "
                 #       f"ratio: {content_area:.2f}")
 
             index += 1
+    df.to_csv("data/visualized_masks/tiles.csv", index = None)
+
 
     # cv2.imshow("window_name", disp_mask)
     # cv2.waitKey(0)
