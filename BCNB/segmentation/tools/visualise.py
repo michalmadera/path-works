@@ -1,4 +1,4 @@
-from PIL import Image as PILImage, ImageOps
+from PIL import Image as PILImage, ImageOps,ImageDraw
 import matplotlib.pyplot as plt
 import numpy as np
 import keras
@@ -74,14 +74,14 @@ def overlay_masks(input_img_list, predictions, image_path, mask_path, tile_width
 def merge_image_tiles_and_overlay(image_path, file_path):
 
     image = PILImage.open(image_path)
+    imgRect = ImageDraw.Draw(image)
     for row in np.genfromtxt(file_path, delimiter=','):
         id, tile_x, tile_y, tile_width, tile_height = [int(x) if str(x) != 'nan' else 0 for x in row[1:]]
 
-        black_tile = PILImage.new('RGB', (tile_width, tile_height), (0, 0, 0))
         right = tile_x + tile_width
         lower = tile_y + tile_height
         box = (tile_x, tile_y, right, lower)
-        image.paste(black_tile, box)
+        imgRect.rectangle(box, outline="red" , width=10)
 
     return image
 
