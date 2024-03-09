@@ -18,7 +18,7 @@ def extract_tissue_mask(image_path):
 
 
 def split_image_into_tiles(image_path, tiles_folder, image_mask_path, mask_tiles_folder,
-                           tile_width, tile_height, tissue_ratio_threshold):
+                           tile_width, tile_height, tissue_ratio_threshold, dataframe, first_path_segment):
     """
     Split an image into tiles and save them in a folder.
 
@@ -42,7 +42,6 @@ def split_image_into_tiles(image_path, tiles_folder, image_mask_path, mask_tiles
 
     # Split the image into tiles and save them
     index = 1
-    df = pd.DataFrame()
     for x in range(x_tiles):
         for y in range(y_tiles):
             # Define the box to crop
@@ -63,12 +62,14 @@ def split_image_into_tiles(image_path, tiles_folder, image_mask_path, mask_tiles
                 # print(index, x, y, box, f"{content_area:.2f}")
                 save_tile(image_path, index, tile, tiles_folder)
                 save_tile(image_mask_path, index, mask_tile, mask_tiles_folder, extension=".png")
-                df = pd.concat([df, pd.DataFrame([{"slide_id": "../"+image_path, "tile_id": index, "tile_x": left, "tile_y": upper, "tile_height": tile_height, "tile_width": tile_width}])], ignore_index=True)
+                dataframe = pd.concat([dataframe, pd.DataFrame([{"slide_id": os.path.join(first_path_segment,image_path), "tile_id": index, "tile_x": left, "tile_y": upper, "tile_height": tile_height, "tile_width": tile_width}])], ignore_index=True)
                 # print(f"Tile saved to '{os.path.splitext(os.path.basename(image_path))[0]}.{index}.jpg, "
                 #       f"ratio: {content_area:.2f}")
 
             index += 1
-    df.to_csv("data/visualized_masks/tiles.csv", index = None)
+
+    return dataframe
+
 
 
     # cv2.imshow("window_name", disp_mask)
@@ -131,31 +132,32 @@ def save_tile(image_path, index, tile, tiles_folder, extension=".jpg"):
     tile.save(full_tile_filename)
 
 
-def split_to_tiles(images_folder, tiles_folder, masks_folder, mask_tile_folder, tile_width, tile_height,
-                   tissue_ratio_threshold=.3):
-    """
-    Split all images in a folder into tiles and save them in another folder.
+def split_to_tiles(images_folder, tiles_folder, masks_folder, mask_tile_folder, tile_width, tile_height, csv_save_path,
+                       tissue_ratio_threshold=.3):
+        """
+        Split all images in a folder into tiles and save them in another folder.
 
-    :param images_folder: The folder containing the images to split.
-    :param tiles_folder: The folder to save the tiles.
-    :param tile_width: The width of the tiles in pixels.
-    :param tile_height: The height of the tiles in pixels.
-    """
-    os.makedirs(tiles_folder, exist_ok=True)
-    os.makedirs(mask_tile_folder, exist_ok=True)
-
-    for filename in os.listdir(images_folder):
-        if filename.endswith(".jpg") or filename.endswith(".jpeg") or filename.endswith(".png"):
-            input_path = os.path.join(images_folder, filename)
-            mask_path = os.path.join(masks_folder, filename.replace(".jpg", ".png"))
-            print(input_path, mask_path)
-            split_image_into_tiles(input_path, tiles_folder, mask_path, mask_tile_folder,
-                                   tile_width, tile_height, tissue_ratio_threshold)
-
+        :param csv_save_path: Path to save csv file
+        :param images_folder: The folder containing the images to split.
+        :param tiles_folder: The folder to save the tiles.
+        :param tile_width: The width of the tiles in pixels.
+        :param tile_height: The height of the tiles in pixels.
+        """
+        os.makedirs(tiles_folder, exist_ok=True)
+        os.makedirs(mask_tile_folder, exist_ok=True)
+        df = pd.DataFrame()
+        for filename in os.listdir(images_folder):
+            if filename.endswith(".jpg") or filename.endswith(".jpeg") or filename.endswith(".png"):
+                input_path = os.path.join(images_folder, filename)
+                mask_path = os.path.join(masks_folder, filename.replace(".jpg", ".png"))
+                print(input_path, mask_path)
+                df = split_image_into_tiles(input_path, tiles_folder, mask_path, mask_tile_folder,
+                                       tile_width, tile_height, tissue_ratio_threshold, df, "../")
+        df.to_csv(csv_save_path)
 
 if __name__ == '__main__':
     split_image_into_tiles_with_background(("../wsi-segment/images/1.jpg", "../wsi-segment/test_tiles", "../wsi-segment/masks/1.jpg", "../wsi-segment/test_mask_tiles", 256, 256))
     split_to_tiles('../wsi-segment/images', '../wsi-segment/image-tiles',
                    '../wsi-segment/masks', '../wsi-segment/mask-tiles',
-                   256, 256)
+                   256, 256, csv_save_path='../data/visualized_masks/tile.csv')
     print("Tiles created and saved successfully.")

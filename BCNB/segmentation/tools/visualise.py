@@ -1,11 +1,14 @@
-from PIL import Image as PILImage, ImageOps,ImageDraw
+from PIL import Image as PILImage, ImageOps, ImageDraw
 import matplotlib.pyplot as plt
 import numpy as np
 import keras
 import os
 import re
 import pandas as pd
+
 PILImage.MAX_IMAGE_PIXELS = None
+
+
 def create_mask_list(input_img_list, predictions):
     output_mask_list = []
     for i in range(0, len(input_img_list)):
@@ -40,6 +43,18 @@ def merge_prediction_tiles(input_img_list, output_mask_list, image_path, tile_wi
     return predicted_mask
 
 
+def merge_prediction_csv(file_path, output_mask_list):
+    df = pd.read_csv(file_path, sep=',')
+    for index, row in df.iterrows():
+        tile_x = row["tile_x"]
+        tile_y = row["tile_y"]
+        tile_width = row["tile_width"]
+        tile_height = row["tile_height"]
+        right = tile_x + tile_width
+        lower = tile_y + tile_height
+        box = (tile_x, tile_y, right, lower)
+
+
 def overlay_masks(input_img_list, predictions, image_path, mask_path, tile_width,
                   tile_height):
     output_mask_list = create_mask_list(input_img_list, predictions)
@@ -71,19 +86,62 @@ def overlay_masks(input_img_list, predictions, image_path, mask_path, tile_width
     return merged_image_with_mask
 
 
-def merge_image_tiles_and_overlay(image_path, file_path):
+def selected_image_path(image_number, dir_path, extension):
+    return f"{dir_path}{image_number}.{extension}"
 
-    image = PILImage.open(image_path)
-    imgRect = ImageDraw.Draw(image)
-    for row in np.genfromtxt(file_path, delimiter=','):
-        id, tile_x, tile_y, tile_width, tile_height = [int(x) if str(x) != 'nan' else 0 for x in row[1:]]
 
+def merge_image_tiles_and_overlay(file_path, image_number, dir_path, save_path, save_mode, resize_size=(5000, 5000), resize=1):
+    resized_save_path = selected_image_path(image_number, f"{save_path}resized_", "png")
+    save_path = selected_image_path(image_number, save_path, "png")
+
+    image = PILImage.open(selected_image_path(image_number, dir_path, "jpg"))
+    img_rect = ImageDraw.Draw(image)
+    df = pd.read_csv(file_path, sep=',')
+    selected_rows = df.loc[df["slide_id"] == selected_image_path(image_number, dir_path, "jpg")]
+    for index, row in selected_rows.iterrows():
+        tile_x = row["tile_x"]
+        tile_y = row["tile_y"]
+        tile_width = row["tile_width"]
+        tile_height = row["tile_height"]
         right = tile_x + tile_width
         lower = tile_y + tile_height
         box = (tile_x, tile_y, right, lower)
-        imgRect.rectangle(box, outline="red" , width=10)
+        img_rect.rectangle(box, outline="red", width=10)
+
+    image_copy_for_resizing = image
+
+    if save_mode == 1:
+        save_merged_image(save_path, image)
+        if resize == 1:
+            resized_image = resize_image(image_copy_for_resizing, resize_size)
+            save_merged_image(resized_save_path, resized_image)
 
     return image
+
+
+def overlay_mask_with_rectangles(mask_dir_path, file_path, image_number, dir_path, save_path, mask_save_path,
+                                 resize_size=(5000, 5000), resize=1, save_mode=0):
+    mask_path = f"{mask_dir_path}{image_number}.png"
+    image = merge_image_tiles_and_overlay(file_path, image_number, dir_path, save_path, save_mode)
+    mask = PILImage.open(mask_path).convert("L")
+    alpha = np.where(np.array(mask) == 0, 0, 255).astype(np.uint8)
+
+    yellow_color = np.zeros_like(image)
+    yellow_color[:, :, 0] = 64
+    yellow_color[:, :, 1] = 64
+
+    alpha_colored = np.where(alpha[..., None], yellow_color, 0)
+
+    result = np.array(image) + alpha_colored
+
+    merged_image = PILImage.fromarray(result.astype(np.uint8))
+    save_path = selected_image_path(image_number, mask_save_path, "png")
+
+    if resize == 1:
+        merged_image = resize_image(merged_image, resize_size)
+
+    merged_image.save(save_path)
+    return merged_image
 
 
 def save_merged_image(save_path, merged_image):
@@ -94,6 +152,11 @@ def display_merged_image(merged_image):
     plt.imshow(merged_image)
     plt.axis('off')
     plt.show()
+
+
+def resize_image(image, size):
+    image.thumbnail(size, PILImage.LANCZOS)
+    return image
 
 
 if __name__ == "__main__":
@@ -110,7 +173,12 @@ if __name__ == "__main__":
 
     # merged_image = overlay_masks(image_path='../data/test-images/45.jpg', mask_path="../data/test-masks/45.png",
     #                              input_img_list=input_img_paths, tile_width=256, tile_height=256,
-    #                              predictions=predictions)
-    merged_image_csv = merge_image_tiles_and_overlay( image_path='../data/source-images-test/45.jpg', file_path="../data/visualized_masks/tiles.csv")
-    save_merged_image("../data/visualized_masks/merged_image_with_mask.png", merged_image_csv)
-    display_merged_image(merged_image_csv)
+    #                              predictions=predictions)Wx`
+    merged_image_csv = merge_image_tiles_and_overlay( file_path="../data/visualized_masks/tiles.csv", image_number=19, dir_path="../data/source-images/", save_path="../data/visualized_masks/merged_image_with_rectangles_", save_mode=1)
+    #save_merged_image("../data/visualized_masks/merged_image_with_mask.png", merged_image_csv)
+    merged_image_with_rectangels = overlay_mask_with_rectangles(mask_dir_path="../data/source-masks/",
+                                                                file_path="../data/visualized_masks/tiles.csv",
+                                                                image_number=19, dir_path="../data/source-images/",
+                                                                save_path="../data/visualized_masks/merged_image_with_rectangles_",
+                                                                mask_save_path="../data/visualized_masks/merged_rectangles_with_mask_")
+    #display_merged_image(merged_image_csv)
