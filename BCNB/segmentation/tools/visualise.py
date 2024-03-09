@@ -5,6 +5,7 @@ import keras
 import os
 import re
 import pandas as pd
+import math
 
 PILImage.MAX_IMAGE_PIXELS = None
 
@@ -90,7 +91,8 @@ def selected_image_path(image_number, dir_path, extension):
     return f"{dir_path}{image_number}.{extension}"
 
 
-def merge_image_tiles_and_overlay(file_path, image_number, dir_path, save_path, save_mode, resize_size=(5000, 5000), resize=1):
+def merge_image_tiles_and_overlay(file_path, image_number, dir_path, save_path, save_mode, resize_size=(5000, 5000),
+                                  resize=1):
     resized_save_path = selected_image_path(image_number, f"{save_path}resized_", "png")
     save_path = selected_image_path(image_number, save_path, "png")
 
@@ -143,6 +145,28 @@ def overlay_mask_with_rectangles(mask_dir_path, file_path, image_number, dir_pat
     merged_image.save(save_path)
     return merged_image
 
+#funkcja do plotowania obrazków
+def overlay_mask_with_rectangles_resize(mask_dir_path, file_path, image_number, dir_path, save_path, mask_save_path,
+                                 resize_size=(500, 500), resize=1, save_mode=0):
+    mask_path = f"{mask_dir_path}{image_number}.png"
+    image = merge_image_tiles_and_overlay(file_path, image_number, dir_path, save_path, save_mode)
+    image = resize_image(image, resize_size)
+    mask = PILImage.open(mask_path).convert("L")
+    mask = resize_image(mask, resize_size)
+    alpha = np.where(np.array(mask) == 0, 0, 255).astype(np.uint8)
+
+    yellow_color = np.zeros_like(image)
+    yellow_color[:, :, 0] = 64
+    yellow_color[:, :, 1] = 64
+
+    alpha_colored = np.where(alpha[..., None], yellow_color, 0)
+
+    result = np.array(image) + alpha_colored
+
+    merged_image = PILImage.fromarray(result.astype(np.uint8))
+    save_path = selected_image_path(image_number, mask_save_path, "png")
+
+    return merged_image
 
 def save_merged_image(save_path, merged_image):
     merged_image.save(save_path)
@@ -157,6 +181,19 @@ def display_merged_image(merged_image):
 def resize_image(image, size):
     image.thumbnail(size, PILImage.LANCZOS)
     return image
+
+
+def plot_images(images):
+    num_images = len(images)
+    cols = math.ceil(math.sqrt(num_images))
+    rows = math.ceil(num_images / cols)
+    fig, axes = plt.subplots(rows, cols, figsize=(20, 20))
+    for i, ax in enumerate(axes.flat):
+        ax.imshow(images[i], aspect='auto')
+        ax.axis('off')
+        ax.text(0.5, -0.1, f"Slide {i}", transform=ax.transAxes, fontsize=10,
+               ha='center', va='center')
+    plt.show()
 
 
 if __name__ == "__main__":
@@ -174,11 +211,22 @@ if __name__ == "__main__":
     # merged_image = overlay_masks(image_path='../data/test-images/45.jpg', mask_path="../data/test-masks/45.png",
     #                              input_img_list=input_img_paths, tile_width=256, tile_height=256,
     #                              predictions=predictions)Wx`
-    merged_image_csv = merge_image_tiles_and_overlay( file_path="../data/visualized_masks/tiles.csv", image_number=19, dir_path="../data/source-images/", save_path="../data/visualized_masks/merged_image_with_rectangles_", save_mode=1)
+    #merged_image_csv = merge_image_tiles_and_overlay( file_path="../data/visualized_masks/tiles.csv", image_number=19, dir_path="../data/source-images/", save_path="../data/visualized_masks/merged_image_with_rectangles_", save_mode=1)
     #save_merged_image("../data/visualized_masks/merged_image_with_mask.png", merged_image_csv)
-    merged_image_with_rectangels = overlay_mask_with_rectangles(mask_dir_path="../data/source-masks/",
-                                                                file_path="../data/visualized_masks/tiles.csv",
-                                                                image_number=19, dir_path="../data/source-images/",
-                                                                save_path="../data/visualized_masks/merged_image_with_rectangles_",
-                                                                mask_save_path="../data/visualized_masks/merged_rectangles_with_mask_")
+    # merged_image_with_rectangels = overlay_mask_with_rectangles(mask_dir_path="../data/source-masks/",
+    #                                                             file_path="../data/visualized_masks/tiles.csv",
+    #                                                             image_number=19, dir_path="../data/source-images/",
+    #                                                             save_path="../data/visualized_masks/merged_image_with_rectangles_",
+    #                                                             mask_save_path="../data/visualized_masks/merged_rectangles_with_mask_")
     #display_merged_image(merged_image_csv)
+    images = []
+    for i in range(1, 7):
+        image = overlay_mask_with_rectangles_resize(mask_dir_path="../data/source-masks/",
+                                             file_path="../data/visualized_masks/tiles.csv",
+                                             image_number=i, dir_path="../data/source-images/",
+                                             save_path="../data/visualized_masks/merged_image_with_rectangles_",
+                                             mask_save_path="../data/visualized_masks/merged_rectangles_with_mask_")
+        images.append(image)
+
+    resized_images = [resize_image(image, (50, 50)) for image in images]
+    plot_images(resized_images)
