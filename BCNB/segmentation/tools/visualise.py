@@ -82,6 +82,7 @@ def draw_rectangles(file_path, image_number, dir_path, save_path, save_mode, res
     return image
 
 
+
 def overlay_gd_and_rectangles(mask_dir_path, file_path, image_number, dir_path, save_path, mask_save_path,
                                  resize_size=(5000, 5000), resize=0, save_mode=1):
     mask_path = f"{mask_dir_path}{image_number}.png"
