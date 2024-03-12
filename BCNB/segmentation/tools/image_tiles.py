@@ -132,7 +132,7 @@ def save_tile(image_path, index, tile, tiles_folder, extension=".jpg"):
     tile.save(full_tile_filename)
 
 
-def split_to_tiles(images_folder, tiles_folder, masks_folder, mask_tile_folder, tile_width, tile_height, csv_save_path,
+def split_to_tiles(images_folder, tiles_folder, masks_folder, mask_tile_folder, tile_width, tile_height, csv_save_path, prefix,
                        tissue_ratio_threshold=.3):
         """
         Split all images in a folder into tiles and save them in another folder.
@@ -152,12 +152,12 @@ def split_to_tiles(images_folder, tiles_folder, masks_folder, mask_tile_folder, 
                 mask_path = os.path.join(masks_folder, filename.replace(".jpg", ".png"))
                 print(input_path, mask_path)
                 df = split_image_into_tiles(input_path, tiles_folder, mask_path, mask_tile_folder,
-                                       tile_width, tile_height, tissue_ratio_threshold, df, "../")
+                                       tile_width, tile_height, tissue_ratio_threshold, df, prefix)
         df.to_csv(csv_save_path)
 
 if __name__ == '__main__':
     split_image_into_tiles_with_background(("../wsi-segment/images/1.jpg", "../wsi-segment/test_tiles", "../wsi-segment/masks/1.jpg", "../wsi-segment/test_mask_tiles", 256, 256))
     split_to_tiles('../wsi-segment/images', '../wsi-segment/image-tiles',
                    '../wsi-segment/masks', '../wsi-segment/mask-tiles',
-                   256, 256, csv_save_path='../data/visualized_masks/tile.csv')
+                   256, 256, csv_save_path='../data/visualized_masks/tile.csv', prefix="../")
     print("Tiles created and saved successfully.")

@@ -20,78 +20,39 @@ def create_mask_list(input_img_list, predictions):
     return output_mask_list
 
 
-def merge_prediction_tiles(input_img_list, output_mask_list, image_path, tile_width, tile_height):
+def merge_prediction_csv(file_path, output_mask_list, input_img_list, image_path, image_number, save_path, dir_path):
+    df = pd.read_csv(file_path, sep=',')
+    save_path = selected_image_path(image_number, save_path, "png")
+
     tile_numbers = [os.path.splitext(os.path.basename(path))[0].split('.')[1] for path in input_img_list]
     tile_numbers = [int(tile_number) for tile_number in tile_numbers]
-
+    image_path = selected_image_path(image_number, image_path, "jpg")
     image = PILImage.open(image_path)
     img_width, img_height = image.size
 
-    tiles_per_column = img_width // tile_width
-    tiles_per_row = img_height // tile_height
-
     predicted_mask = PILImage.new('RGB', (img_width, img_height), (0, 0, 0))
-    for i in range(tiles_per_row * tiles_per_column):
-        col = i // tiles_per_column
-        row = i % tiles_per_column
-        tile_index = i + 1
-        if tile_index in tile_numbers:
-            pred_tile = output_mask_list.pop(0)
-            predicted_mask.paste(pred_tile, (col * tile_width, row * tile_height))
-        else:
-            black_tile = PILImage.new('RGB', (tile_width, tile_height), (0, 0, 0))  # Create black tile for missing ones
-            predicted_mask.paste(black_tile, (col * tile_width, row * tile_height))
-    return predicted_mask
-
-
-def merge_prediction_csv(file_path, output_mask_list):
-    df = pd.read_csv(file_path, sep=',')
-    for index, row in df.iterrows():
+    selected_rows = df.loc[df["slide_id"] == selected_image_path(image_number, dir_path, "jpg")]
+    for index, row in selected_rows.iterrows():
         tile_x = row["tile_x"]
         tile_y = row["tile_y"]
         tile_width = row["tile_width"]
         tile_height = row["tile_height"]
+        tile_id = row["tile_id"]
         right = tile_x + tile_width
         lower = tile_y + tile_height
         box = (tile_x, tile_y, right, lower)
+        if tile_id in tile_numbers:
+            pred_tile = output_mask_list.pop(0)
+            predicted_mask.paste(pred_tile, box)
 
-
-def overlay_masks(input_img_list, predictions, image_path, mask_path, tile_width,
-                  tile_height):
-    output_mask_list = create_mask_list(input_img_list, predictions)
-    predicted_mask = merge_prediction_tiles(input_img_list, output_mask_list, image_path, tile_width, tile_height)
-
-    image = PILImage.open(image_path)
-    mask = PILImage.open(mask_path).convert("L")
-
-    alpha = np.where(np.array(mask) == 0, 0, 255).astype(np.uint8)
-
-    yellow_color = np.zeros_like(image)
-    yellow_color[:, :, 0] = 64
-    yellow_color[:, :, 1] = 64
-
-    alpha_colored = np.where(alpha[..., None], yellow_color, 0)
-
-    result = np.array(image) + alpha_colored
-
-    merged_image = PILImage.fromarray(result.astype(np.uint8))
-
-    mask_array = np.array(predicted_mask)
-    mask_array[(mask_array == 255).all(axis=2)] = [0, 255, 0]
-
-    green_mask = PILImage.fromarray(mask_array)
-    green_mask_resized = green_mask.resize(image.size)
-
-    merged_image_with_mask = PILImage.blend(merged_image.convert("RGBA"), green_mask_resized.convert("RGBA"), alpha=0)
-
-    return merged_image_with_mask
-
+    predicted_mask.save(save_path)
+    return predicted_mask
 
 def selected_image_path(image_number, dir_path, extension):
     return f"{dir_path}{image_number}.{extension}"
 
 
-def merge_image_tiles_and_overlay(file_path, image_number, dir_path, save_path, save_mode, resize_size=(5000, 5000),
+def draw_rectangles(file_path, image_number, dir_path, save_path, save_mode, resize_size=(5000, 5000),
                                   resize=1):
     resized_save_path = selected_image_path(image_number, f"{save_path}resized_", "png")
     save_path = selected_image_path(image_number, save_path, "png")
@@ -110,7 +71,7 @@ def merge_image_tiles_and_overlay(file_path, image_number, dir_path, save_path, 
         box = (tile_x, tile_y, right, lower)
         img_rect.rectangle(box, outline="red", width=10)
 
-    image_copy_for_resizing = image
+    image_copy_for_resizing = image.copy()
 
     if save_mode == 1:
         save_merged_image(save_path, image)
@@ -121,10 +82,10 @@ def merge_image_tiles_and_overlay(file_path, image_number, dir_path, save_path, 
     return image
 
 
-def overlay_mask_with_rectangles(mask_dir_path, file_path, image_number, dir_path, save_path, mask_save_path,
-                                 resize_size=(5000, 5000), resize=1, save_mode=0):
+def overlay_gd_and_rectangles(mask_dir_path, file_path, image_number, dir_path, save_path, mask_save_path,
+                                 resize_size=(5000, 5000), resize=0, save_mode=1):
     mask_path = f"{mask_dir_path}{image_number}.png"
-    image = merge_image_tiles_and_overlay(file_path, image_number, dir_path, save_path, save_mode)
+    image = draw_rectangles(file_path, image_number, dir_path, save_path, save_mode)
     mask = PILImage.open(mask_path).convert("L")
     alpha = np.where(np.array(mask) == 0, 0, 255).astype(np.uint8)
 
@@ -149,7 +110,7 @@ def overlay_mask_with_rectangles(mask_dir_path, file_path, image_number, dir_pat
 def overlay_mask_with_rectangles_resize(mask_dir_path, file_path, image_number, dir_path, save_path, mask_save_path,
                                  resize_size=(500, 500), resize=1, save_mode=0):
     mask_path = f"{mask_dir_path}{image_number}.png"
-    image = merge_image_tiles_and_overlay(file_path, image_number, dir_path, save_path, save_mode)
+    image = draw_rectangles(file_path, image_number, dir_path, save_path, save_mode)
     image = resize_image(image, resize_size)
     mask = PILImage.open(mask_path).convert("L")
     mask = resize_image(mask, resize_size)
@@ -196,6 +157,33 @@ def plot_images(images):
     plt.show()
 
 
+def final_mask_overlay(mask_dir_path, image_number, image_dir, save_path, resize_size=(5000, 5000), resize=1):
+    mask_path = f"{mask_dir_path}{image_number}.png"
+    img_path = f"{image_dir}{image_number}.png"
+
+    image = PILImage.open(img_path)
+    mask = PILImage.open(mask_path).convert("L")
+
+    alpha = np.where(np.array(mask) == 0, 0, 255).astype(np.uint8)
+
+    green_color = np.zeros_like(image)
+    green_color[:, :, 1] = 64
+
+    alpha_colored = np.where(alpha[..., None], green_color, 0)
+
+    result = np.array(image) + alpha_colored
+
+    merged_image = PILImage.fromarray(result.astype(np.uint8))
+    resize_merged_image = merged_image.copy()
+    resized_save_path = selected_image_path(image_number, save_path+"resized_", "png")
+    save_path = selected_image_path(image_number, save_path, "png")
+    if resize == 1:
+        merged_image_resize = resize_image(resize_merged_image, resize_size)
+        merged_image_resize.save(resized_save_path)
+    merged_image.save(save_path)
+
+    return merged_image
+
 if __name__ == "__main__":
     input_img_paths = sorted([os.path.join("../data/test_tiles", fname) for fname in os.listdir("../data/test_tiles")])
     input_img_paths = sorted(input_img_paths,
@@ -219,14 +207,13 @@ if __name__ == "__main__":
     #                                                             save_path="../data/visualized_masks/merged_image_with_rectangles_",
     #                                                             mask_save_path="../data/visualized_masks/merged_rectangles_with_mask_")
     #display_merged_image(merged_image_csv)
-    images = []
-    for i in range(1, 7):
-        image = overlay_mask_with_rectangles_resize(mask_dir_path="../data/source-masks/",
-                                             file_path="../data/visualized_masks/tiles.csv",
-                                             image_number=i, dir_path="../data/source-images/",
-                                             save_path="../data/visualized_masks/merged_image_with_rectangles_",
-                                             mask_save_path="../data/visualized_masks/merged_rectangles_with_mask_")
-        images.append(image)
-
-    resized_images = [resize_image(image, (50, 50)) for image in images]
-    plot_images(resized_images)
+    #narysuje prostokąty wybrane do uczenia na oryginalnym obrazie a następnie nałozy na niego mastkę ground-truth
+    overlay_gd_and_rectangles("../data/source-masks-test/", "../data/visualized_masks/tile.csv", 90,
+                                         "../data/source-images-test/", "../data/visualized_masks/rectangles_",
+                                         "../data/visualized_masks/merged_rectangles_with_mask_")
+    #utworzy maskę predykcji
+    merge_prediction_csv("../data/visualized_masks/tile.csv", predictions, input_img_paths,
+                         "../data/source-images-test/", 91, "../data/visualized_masks/prediction_mask_",
+                         "../data/source-images-test/")
+    # nałożenie wszystkich maski predykcji na obraz z maską ground-truth i prostokątami
+    final_mask_overlay("../data/visualized_masks/prediction_mask_", 90, "../data/visualized_masks/merged_rectangles_with_mask_",  "../data/visualized_masks/final_mask_")
