@@ -3,6 +3,7 @@ import cv2
 import pandas as pd
 import numpy as np
 import os
+import matplotlib.pyplot as plt
 
 def selected_image_path(image_number, dir_path, extension):
     return f"{dir_path}{image_number}.{extension}"
@@ -131,3 +132,38 @@ def resize_image(image: np.ndarray, size: tuple) -> np.ndarray:
     resized_image = cv2.resize(image, (new_w, new_h))
 
     return resized_image
+
+def divide_image_into_tiles(image_path):
+
+    image = cv2.imread(image_path)
+    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    num_rows = 4
+    num_cols = 4
+    tile_height = image.shape[0] // num_rows
+    tile_width = image.shape[1] // num_cols
+
+    tiles = []
+    for row in range(num_rows):
+        for col in range(num_cols):
+
+            y_start = row * tile_height
+            y_end = (row + 1) * tile_height
+            x_start = col * tile_width
+            x_end = (col + 1) * tile_width
+
+            tile = image[y_start:y_end, x_start:x_end]
+
+
+            tiles.append(tile)
+
+    return tiles
+
+def display_tile(tiles, tile_number):
+
+    num_cols = 4
+    row = tile_number // num_cols
+    col = tile_number % num_cols
+
+    plt.imshow(tiles[row * num_cols + col])
+    plt.axis('off')
+    plt.show()
