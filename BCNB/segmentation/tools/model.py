@@ -1,3 +1,5 @@
+import os.path
+
 import tensorflow as tf
 import keras
 import numpy as np
@@ -5,7 +7,7 @@ from tensorflow import data as tf_data
 from tensorflow import image as tf_image
 from tensorflow import io as tf_io
 from keras import layers
-
+from tensorflow.keras import backend as K
 
 def check_GPU():
     print(tf.config.list_physical_devices('GPU'))
@@ -94,21 +96,24 @@ def get_model(img_size, num_classes):
     return model
 
 
-def compile_model(model, optimizer=keras.optimizers.Adam(1e-4), loss="sparse_categorical_crossentropy"):
+def compile_model(model, optimizer=keras.optimizers.Adam(1e-4), loss="sparse_categorical_crossentropy", metrics=['accuracy']):
     model.compile(
-        optimizer=optimizer, loss=loss
+        optimizer=optimizer, loss=loss, metrics=metrics
     )
 
 
-def save_model(save_name="oxford_segmentation.tf", save_best_only=True):
-    callbacks = [
-        keras.callbacks.ModelCheckpoint(save_name, save_best_only=save_best_only)
-    ]
+def make_callbacks(save_name="oxford_segmentation.tf", save_best_only=True, log_dir="logs/fit"):
+    os.makedirs(log_dir, exist_ok=True)
+    folder_count = len([name for name in os.listdir(log_dir) if os.path.isdir(os.path.join(log_dir, name))])
+    log_dir = os.path.join(log_dir, f"test_{folder_count}")
+    tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=log_dir, histogram_freq=1, write_images=True)
+    save_callback = keras.callbacks.ModelCheckpoint(save_name, save_best_only=save_best_only)
+    callbacks = [tensorboard_callback, save_callback]
     return callbacks
 
 
-def train_model(model, train_dataset, validation_dateset, callbacks, epochs=50, verbose=2):
-    model.fit(train_dataset, epochs, validation_dateset, callbacks, verbose)
+def train_model(model, train_dataset, validation_dataset, callbacks, epochs=50, verbose=2):
+    model.fit(train_dataset, epochs=epochs, validation_data=validation_dataset, callbacks=callbacks, verbose=verbose)
 
 
 def model_prediction(model, val_dataset):
@@ -118,3 +123,63 @@ def model_prediction(model, val_dataset):
 def load_model(save_name = 'oxford_segmentation.tf'):
     model = tf.keras.models.load_model(save_name)
     return model
+
+def dice_coef(y_true, y_pred, smooth=100):
+    y_true = tf.cast(y_true, dtype=tf.float32)
+    y_true_f = K.flatten(y_true)
+    y_pred_f = K.flatten(y_pred)
+    intersection = K.sum(y_true_f * y_pred_f)
+    dice = (2. * intersection + smooth) / (K.sum(y_true_f) + K.sum(y_pred_f) + smooth)
+    return dice.numpy()
+
+def AUROC(y_true, y_pred):
+    y_true_tensor = tf.constant(y_true)
+    y_pred_tensor = tf.constant(y_pred)
+
+    auc_metric = tf.keras.metrics.AUC()
+
+    auc_metric.update_state(y_true_tensor, y_pred_tensor)
+
+    auroc_value = auc_metric.result()
+
+    return auroc_value.numpy()
+
+def ACC(y_true, y_pred):
+    y_true_tensor = tf.constant(y_true)
+    y_pred_tensor = tf.constant(y_pred)
+
+    acc_metric = tf.keras.metrics.Accuracy()
+
+    acc_metric.update_state(y_true_tensor, y_pred_tensor)
+
+    acc_value = acc_metric.result()
+
+    return acc_value.numpy()
+
+def IoU(y_true, y_pred, num_classes = 2, target_class_ids=[0]):
+    y_true_tensor = tf.constant(y_true)
+    y_pred_tensor = tf.constant(y_pred)
+
+    IoU_metric = tf.keras.metrics.IoU(num_classes, target_class_ids)
+
+    IoU_metric.update_state(y_true_tensor, y_pred_tensor)
+
+    IoU_value = IoU_metric.result()
+
+    return IoU_value.numpy()
+def calculate_iou_and_dice(y_true ,y_pred):
+    auroc_value = AUROC(y_true, y_pred)
+    acc_value = ACC(y_true, y_pred)
+    dice = dice_coef(y_true, y_pred)
+    iou = IoU(y_true, y_pred)
+
+    return acc_value, auroc_value, iou, dice
+
+if __name__ == '__main__':
+    y_true = [0, 1, 1, 0, 1]
+    y_pred = [0, 0.3, 0.2, 0.3, 0.7]
+    acc, auroc, iou, dice = calculate_iou_and_dice(y_true, y_pred)
+    print(f"ACC: {acc}")
+    print(f"AUROC: {auroc}")
+    print(f"IoU: {iou}")
+    print(f"Dice: {dice}")

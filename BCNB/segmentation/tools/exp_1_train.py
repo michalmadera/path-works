@@ -23,33 +23,23 @@ valid_dataset = mod.get_dataset(batch_size, img_size,
 
 model = mod.get_model()
 
-model.compile(
-    optimizer=keras.optimizers.Adam(1e-4), loss = "sparse_categorical_crossentropy"
-)
+optimizer = keras.optimizers.Adam(1e-8)
+mod.compile_model(model, optimizer=optimizer)
 
 # TODO: Handle tensorboard callback in a better way. Use automatic folder naming.
-callbacks = [
-    keras.callbacks.ModelCheckpoint("oxford_segmentation.tf", save_best_only=True),
-    TensorBoard(log_dir='logs/2',histogram_freq=1,write_images=True)
-]
+callbacks = mod.make_callbacks()
 
-model.fit(
-    train_dataset,
-    epochs=epochs,
-    validation_data=valid_dataset,
-    callbacks=callbacks,
-    verbose=2,
-)
+mod.train_model(model, train_dataset=train_dataset, validation_dataset=valid_dataset, epochs=epochs, callbacks=callbacks, verbose=2)
 
 # Test the model
 test_dataset = mod.get_dataset(batch_size, img_size,
                                test_input_img_paths, test_target_img_paths)
 
 # Open the best persisted model
-model = keras.models.load_model("oxford_segmentation.tf")
+model = mod.load_model()
 
 # Predict on the test dataset
-predictions = model.predict(test_dataset)
+predictions = mod.model_prediction(model, valid_dataset)
 
 # TODO: Implement mehtod to calculate ACC, AUROC, IoU, and Dice for the predictions
 acc, auroc, iou, dice = mod.calculate_iou_and_dice(test_dataset, predictions)
