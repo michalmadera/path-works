@@ -53,7 +53,7 @@ test_dataset = mod.get_dataset(batch_size, img_size,
                                test_input_img_paths, test_target_img_paths)
 
 # Open the best persisted model
-model = mod.load_model()
+#model = mod.load_model()
 
 # Predict on the test dataset
 predictions = mod.model_prediction(model, valid_dataset)
@@ -107,18 +107,18 @@ for i in range(number_of_images_to_vis):
         generate_pred_list(i, test_preds_i)
 
     ground_truth_rect_i = cv2_visualizer.overlay_gd_and_rectangles(mask_dir_path="data/test-masks/",
-                                                          file_path="data/visualized_masks/tile.csv", image_number=img_index,
+                                                          file_path="data/test-visualized_masks/test_tiles.csv", image_number=img_index,
                                                           dir_path="data/test-images/",
-                                                          save_path="data/visualized_masks/rectangles_",
-                                                          mask_save_path="data/visualized_masks/merged_rectangles_with_mask_")
+                                                          save_path="data/test-visualized_masks/rectangles_",
+                                                          mask_save_path="data/test-visualized_masks/merged_rectangles_with_mask_")
 
-    pred_i = cv2_visualizer.merge_prediction_csv("data/visualized_masks/tile.csv", test_pred_list, input_img_paths_i,
-                                                  "data/test-images/", img_index, "data/save_path/prediction_mask_",
+    pred_i = cv2_visualizer.merge_prediction_csv("data/test-visualized_masks/tile.csv", test_pred_list, input_img_paths_i,
+                                                  "data/test-images/", img_index, "data/test-visualized_masks/prediction_mask_",
                                                   "data/test-images/")
 
-    final_mask_i = cv2_visualizer.final_mask_overlay("data/visualized_masks/prediction_mask_", img_index,
-                                                      "data/visualized_masks/merged_rectangles_with_mask_",
-                                                      "data/visualized_masks/final_mask_")
+    final_mask_i = cv2_visualizer.final_mask_overlay("data/test-visualized_masks/prediction_mask_", img_index,
+                                                      "data/test-visualized_masks/merged_rectangles_with_mask_",
+                                                      "data/test-visualized_masks/final_mask_")
 
 
 

@@ -102,10 +102,11 @@ def compile_model(model, optimizer=keras.optimizers.Adam(1e-4), loss="sparse_cat
     )
 
 
-def make_callbacks(save_name="oxford_segmentation.tf", save_best_only=True, log_dir="logs/fit"):
+def make_callbacks(save_path="", save_best_only=True, log_dir="logs/fit"):
     os.makedirs(log_dir, exist_ok=True)
     folder_count = len([name for name in os.listdir(log_dir) if os.path.isdir(os.path.join(log_dir, name))])
     log_dir = os.path.join(log_dir, f"test_{folder_count}")
+    save_name = os.path.join(save_path, f"model_{folder_count}.tf")
     tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=log_dir, histogram_freq=1, write_images=True)
     save_callback = keras.callbacks.ModelCheckpoint(save_name, save_best_only=save_best_only)
     callbacks = [tensorboard_callback, save_callback]
