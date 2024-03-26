@@ -84,11 +84,16 @@ def generate_pred_list(i, prediction):
     mask = np.expand_dims(mask, axis=-1)
     img = ImageOps.autocontrast(keras.utils.array_to_img(mask))
     test_pred_list.append(img)
+val_input_img_paths = sorted([os.path.join("data/valid-images", fname) for fname in os.listdir("data/valid-images")])
+val_target_img_paths = sorted([os.path.join("data/valid-masks", fname) for fname in os.listdir("data/valid-masks")])
+
+train_input_img_paths = sorted([os.path.join("data/train-images", fname) for fname in os.listdir("data/train-images")])
+train_target_img_paths = sorted([os.path.join("data/train-masks", fname) for fname in os.listdir("data/train-masks")])
 
 len_of_train_val_set = len(train_input_img_paths) + len(val_input_img_paths)
 
 for i in range(number_of_images_to_vis):
-    img_index = i+len_of_train_val_set
+    img_index = i+len_of_train_val_set+1
 
     prefix = f"{img_index}."
 
@@ -112,7 +117,7 @@ for i in range(number_of_images_to_vis):
                                                           save_path="data/test-visualized_masks/rectangles_",
                                                           mask_save_path="data/test-visualized_masks/merged_rectangles_with_mask_")
 
-    pred_i = cv2_visualizer.merge_prediction_csv("data/test-visualized_masks/tile.csv", test_pred_list, input_img_paths_i,
+    pred_i = cv2_visualizer.merge_prediction_csv("data/test-visualized_masks/test_tiles.csv", test_pred_list, input_img_paths_i,
                                                   "data/test-images/", img_index, "data/test-visualized_masks/prediction_mask_",
                                                   "data/test-images/")
 
