@@ -51,14 +51,19 @@ async def analyze_wsi(svs_path: str, analysis_type: str, analysis_parameters_jso
     except Exception as e:
         json_data["prediction_status"] = "error: " + str(e)
 
-    try:
-        engine.overlay_tif_with_pred(svs_path=svs_path, overlay=prediction, save_path=results_folder)
-        json_data["overlay_status"] = "finished"
-    except Exception as e:
-        json_data["overlay_status"] = "error: " + str(e)
+    if json_data["prediction_status"] == "finished":
+        try:
+            engine.overlay_tif_with_pred(svs_path=svs_path, overlay=prediction, save_path=results_folder)
+            json_data["overlay_status"] = "finished"
+        except Exception as e:
+            json_data["overlay_status"] = "error: " + str(e)
 
     with open(json_file_path, "w") as json_file:
         json.dump(json_data, json_file)
+
+    await results_ready(str(num_folders), json_file_path, json_data)
+
+
 
     return f"{num_folders}"
 
