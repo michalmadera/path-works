@@ -408,14 +408,14 @@ def make_prediction(svs_path: str, location: list[int], size: list[int], save_pa
 
     return new_overlay
 
-def overlay_tif_with_pred(svs_path: str, overlay: np.ndarray, save_path: str):
+def overlay_tif_with_pred(svs_path: str, overlay: np.ndarray, save_path: str, location: list[int]):
     wsi_reader = WSIReader.open(input_img=svs_path)
 
     img1 = wsi_reader.slide_thumbnail(resolution=0, units="level")
-
+    save_path = os.path.join(save_path, "result.tif")
     img2 = overlay
-
-    pos_x, pos_y = 17000, 44000
+    img2 = cv2.cvtColor(img2, cv2.COLOR_RGBA2RGB)
+    pos_x, pos_y = location[0],  location[1]
     x_end = pos_x + img2.shape[1]
     y_end = pos_y + img2.shape[0]
 

@@ -6,12 +6,13 @@ import os
 from pydantic import BaseModel, Field
 from typing import List
 
-
 app = FastAPI()
+
 
 class AnalysisParameters(BaseModel):
     analysis_region: List[int]
     is_normalized: bool
+
 
 class AnalysisRequest(BaseModel):
     svs_path: str
@@ -27,11 +28,12 @@ async def analyze_wsi(svs_path: str, analysis_type: str, analysis_parameters_jso
     is_normalized = analysis_parameters["is_normalized"]
 
     svs_path = svs_path.strip('"')
+    svs_path_temp = os.path.join("../", svs_path)
 
-    analysis_dir = "../analysis"
-    results_dir = "../results"
+    analysis_dir = "analysis"
+    results_dir = "../RESULTS"
 
-    folders = os.listdir(analysis_dir)
+    folders = os.listdir(results_dir)
     num_folders = len(folders)
 
     analysis_folder = os.path.join(analysis_dir, f"{num_folders}")
@@ -40,38 +42,51 @@ async def analyze_wsi(svs_path: str, analysis_type: str, analysis_parameters_jso
     os.makedirs(results_folder, exist_ok=True)
     save_path = os.path.join(analysis_folder, "sample.jpg")
     json_file_path = os.path.join(results_folder, f"{num_folders}.json")
+    return_json_file_path = json_file_path.strip("../")
+    return_results_folder_path = results_folder.strip("../")
 
-    json_data = {"prediction_status": "in process", "overlay_status": "in process"}
+    json_data = {"analysis_id": f"{num_folders}", "svs_path": f"{svs_path}",
+                 "analysis_type": f"{analysis_type}", "region": f"{analysis_region[0], analysis_region[1]}",
+                 "is_normalized": f"{is_normalized}", "status": "in process",
+                 "result_json_path": f"{return_json_file_path}", "result_image_path": f"{return_results_folder_path}/result.tif"}
     with open(json_file_path, "w") as json_file:
         json.dump(json_data, json_file)
 
     try:
-        prediction = engine.make_prediction(svs_path=svs_path, location=[analysis_region[0], analysis_region[1]], size=[4000, 4000], save_path=save_path, save_dir=analysis_folder)
-        json_data["prediction_status"] = "finished"
-    except Exception as e:
-        json_data["prediction_status"] = "error: " + str(e)
+        prediction = engine.make_prediction(svs_path=svs_path_temp, location=[analysis_region[0], analysis_region[1]],
+                                            size=[512, 512], save_path=save_path, save_dir=analysis_folder)
 
-    if json_data["prediction_status"] == "finished":
+    except Exception as e:
+        json_data["status"] = "error: " + str(e)
+
+    if json_data["status"] == "in process":
         try:
-            engine.overlay_tif_with_pred(svs_path=svs_path, overlay=prediction, save_path=results_folder)
-            json_data["overlay_status"] = "finished"
+            engine.overlay_tif_with_pred(svs_path=svs_path_temp, overlay=prediction, save_path=results_folder,
+                                         location=[analysis_region[0], analysis_region[1]])
+            json_data["status"] = "finished"
         except Exception as e:
-            json_data["overlay_status"] = "error: " + str(e)
+            json_data["status"] = "error: " + str(e)
 
     with open(json_file_path, "w") as json_file:
         json.dump(json_data, json_file)
 
-    await results_ready(str(num_folders), json_file_path, json_data)
-
-
-
     return f"{num_folders}"
 
 
-@app.post("/resultsReady")
-async def results_ready(analysis_id: str, result_file_path: str, results_data: dict ) -> dict:
+@app.get("/resultsReady")
+async def results_ready(analysis_id: str) -> dict:
 
-    return {"analysis_id": analysis_id, "result_file_path": result_file_path, "results_data": results_data}
+    results_dir = "../RESULTS"
+    results_dir = os.path.join(results_dir, f"{analysis_id}")
+    file_path = os.path.join(results_dir, f"{analysis_id}.json")
+
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail=f"File for analysis ID {analysis_id} not found")
+
+    with open(file_path, "r") as file:
+        results_data = json.load(file)
+
+    return results_data
 
 
 # @app.get("/analysis/{analysis_id}")
@@ -81,7 +96,7 @@ async def results_ready(analysis_id: str, result_file_path: str, results_data: d
 #     return analysis_db[analysis_id]
 @app.get("/results/{result_id}")
 async def get_result_info(result_id: int) -> dict:
-    result_file_path = f"results/{result_id}.json"
+    result_file_path = f"RESULTS/{result_id}.json"
     try:
         with open(result_file_path, "r") as json_file:
             result_data = json.load(json_file)
@@ -89,7 +104,8 @@ async def get_result_info(result_id: int) -> dict:
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="Result not found")
 
-# @app.get("/results")
+
+# @app.get("/RESULTS")
 # async def get_all_results() -> dict:
 #     return results_db
 #
