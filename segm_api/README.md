@@ -10,17 +10,19 @@ docker run -v "$(pwd)/DATA:/DATA" -v "$(pwd)/RESULTS:/RESULTS" -p 8000:8000 --gp
 
 Two folders are mapped: DATA to DATA and RESULTS to RESULTS. Additionally, port 8000 is mapped to 8000, and the `--gpus all` flag ensures the utilization of all available GPUs.
 
+To use cpu execute the following command:
+ocker run -v "$(pwd)/DATA:/DATA" -v "$(pwd)/RESULTS:/RESULTS" -p 8000:8000 -d segm_api
+
 ## analyzeWSI Endpoint
 To analyze your image, place it in the data folder. Then, to make a request to the analyzeWSI endpoint, use, for example, Postman. Select the POST method and provide the following parameters:
-- "svs_path": "DATA/test.jpg"
+- "svs_path": "/DATA/test.jpg"
 - "analysis_type": 1
 
-In the request body, specify:
+In the request body in raw section with json option turned on, specify:
 {
     "analysis_region": [0, 0],
     "is_normalized": false
 }
-
 The function will return an analysis_id of type string:
 "0"
 
@@ -38,6 +40,6 @@ The endpoint returns:
 "region": "(0, 0)",
 "is_normalized": "False",
 "status": "finished",
-"result_json_path": "RESULTS/0/0.json",
-"result_image_path": "RESULTS/0/result.tif"
+"result_json_path": "/RESULTS/0/0.json",
+"result_image_path": "/RESULTS/0/result.tif"
 }

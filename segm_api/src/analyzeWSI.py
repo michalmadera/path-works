@@ -28,10 +28,9 @@ async def analyze_wsi(svs_path: str, analysis_type: str, analysis_parameters_jso
     is_normalized = analysis_parameters["is_normalized"]
 
     svs_path = svs_path.strip('"')
-    svs_path_temp = os.path.join("../", svs_path)
 
     analysis_dir = "analysis"
-    results_dir = "../RESULTS"
+    results_dir = "/RESULTS"
 
     folders = os.listdir(results_dir)
     num_folders = len(folders)
@@ -42,33 +41,36 @@ async def analyze_wsi(svs_path: str, analysis_type: str, analysis_parameters_jso
     os.makedirs(results_folder, exist_ok=True)
     save_path = os.path.join(analysis_folder, "sample.jpg")
     json_file_path = os.path.join(results_folder, f"{num_folders}.json")
-    return_json_file_path = json_file_path.strip("../")
-    return_results_folder_path = results_folder.strip("../")
 
     json_data = {"analysis_id": f"{num_folders}", "svs_path": f"{svs_path}",
                  "analysis_type": f"{analysis_type}", "region": f"{analysis_region[0], analysis_region[1]}",
                  "is_normalized": f"{is_normalized}", "status": "in process",
-                 "result_json_path": f"{return_json_file_path}", "result_image_path": f"{return_results_folder_path}/result.tif"}
+                 "result_json_path": f"{json_file_path}",}
     with open(json_file_path, "w") as json_file:
         json.dump(json_data, json_file)
 
     try:
-        prediction = engine.make_prediction(svs_path=svs_path_temp, location=[analysis_region[0], analysis_region[1]],
+        prediction = engine.make_prediction(svs_path=svs_path, location=[analysis_region[0], analysis_region[1]],
                                             size=[512, 512], save_path=save_path, save_dir=analysis_folder)
 
     except Exception as e:
-        json_data["status"] = "error: " + str(e)
+        json_data["status"] = "error"
+        json_data["status_message"] = str(e)
 
     if json_data["status"] == "in process":
         try:
-            engine.overlay_tif_with_pred(svs_path=svs_path_temp, overlay=prediction, save_path=results_folder,
+            engine.overlay_tif_with_pred(svs_path=svs_path, overlay=prediction, save_path=results_folder,
                                          location=[analysis_region[0], analysis_region[1]])
             json_data["status"] = "finished"
+            json_data["result_image_path"] = f"{results_folder}/result.tif"
         except Exception as e:
-            json_data["status"] = "error: " + str(e)
+            json_data["status"] = "error"
+            json_data["status_message"] = str(e)
 
     with open(json_file_path, "w") as json_file:
         json.dump(json_data, json_file)
+
+    print(json_data)
 
     return f"{num_folders}"
 
@@ -76,7 +78,7 @@ async def analyze_wsi(svs_path: str, analysis_type: str, analysis_parameters_jso
 @app.get("/resultsReady")
 async def results_ready(analysis_id: str) -> dict:
 
-    results_dir = "../RESULTS"
+    results_dir = "/RESULTS"
     results_dir = os.path.join(results_dir, f"{analysis_id}")
     file_path = os.path.join(results_dir, f"{analysis_id}.json")
 
