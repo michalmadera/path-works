@@ -76,6 +76,7 @@ def semantic_seg_engine(
         msk_paths: list[str],
         save_dir: str,
         mode: str,
+        on_gpu,
         preproc_func: Callable | None = None,
 ) -> list:
     bcc_segmentor = SemanticSegmentor(
@@ -93,12 +94,12 @@ def semantic_seg_engine(
         msk_paths,
         save_dir=save_dir,
         mode=mode,
+        on_gpu=on_gpu,
         resolution=1.0,
         units="baseline",
         patch_input_shape=[1024, 1024],
         patch_output_shape=[512, 512],
         stride_shape=[128, 128],
-        on_gpu=True,
         crash_on_exception=True,
     )
     return output
@@ -288,7 +289,7 @@ def _validate_label_info(
 
     return check_uid_list
 
-def make_prediction(svs_path: str, location: list[int], size: list[int], save_path: str, save_dir: str, level: int = 0) -> np.ndarray:
+def make_prediction(svs_path: str, location: list[int], size: list[int], save_path: str, save_dir: str, level: int = 0, on_gpu = True) -> np.ndarray:
     sample_path = save_svs_region(svs_path=svs_path, location=location, level=level, size=size, save_path=save_path)
     output_save_dir = os.path.join(save_dir, "output")
     output_list = semantic_seg_engine(
@@ -296,6 +297,7 @@ def make_prediction(svs_path: str, location: list[int], size: list[int], save_pa
         msk_paths=None,
         save_dir=output_save_dir,
         mode="tile",
+        on_gpu=on_gpu
         #preproc_func tylko jeżeli mamy pewność że zdjęcie nie zostało wcześniej znormalizowane
         #preproc_func=stain_norm_func
     )

@@ -17,6 +17,7 @@ ocker run -v "$(pwd)/DATA:/DATA" -v "$(pwd)/RESULTS:/RESULTS" -p 8000:8000 -d se
 To analyze your image, place it in the data folder. Then, to make a request to the analyzeWSI endpoint, use, for example, Postman. Select the POST method and provide the following parameters:
 - "svs_path": "/DATA/test.jpg"
 - "analysis_type": 1
+- "on_gpu": False
 
 In the request body in raw section with json option turned on, specify:
 {
@@ -35,7 +36,7 @@ The resultReady endpoint takes an analysis_id as input and returns a JSON file w
 The endpoint returns:
 {
 "analysis_id": "0",
-"svs_path": "svs_dir/test.jpg",
+"svs_path": "/DATA/test.jpg",
 "analysis_type": "1",
 "region": "(0, 0)",
 "is_normalized": "False",

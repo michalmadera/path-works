@@ -5,7 +5,7 @@ import segmentation_engine as engine
 import os
 from pydantic import BaseModel, Field
 from typing import List
-
+import time
 app = FastAPI()
 
 
@@ -21,11 +21,13 @@ class AnalysisRequest(BaseModel):
 
 
 @app.post("/analyzeWSI")
-async def analyze_wsi(svs_path: str, analysis_type: str, analysis_parameters_json: AnalysisParameters) -> str:
+async def analyze_wsi(svs_path: str, analysis_type: str, on_gpu, analysis_parameters_json: AnalysisParameters) -> str:
     analysis_parameters = analysis_parameters_json.dict()
 
     analysis_region = analysis_parameters["analysis_region"]
     is_normalized = analysis_parameters["is_normalized"]
+
+    on_gpu = on_gpu.lower() == "true"
 
     svs_path = svs_path.strip('"')
 
@@ -45,22 +47,29 @@ async def analyze_wsi(svs_path: str, analysis_type: str, analysis_parameters_jso
     json_data = {"analysis_id": f"{num_folders}", "svs_path": f"{svs_path}",
                  "analysis_type": f"{analysis_type}", "region": f"{analysis_region[0], analysis_region[1]}",
                  "is_normalized": f"{is_normalized}", "status": "in process",
-                 "result_json_path": f"{json_file_path}",}
+                 "result_json_path": f"{json_file_path}", "on_gpu": f"{on_gpu}"}
     with open(json_file_path, "w") as json_file:
         json.dump(json_data, json_file)
 
     try:
+        start_time = time.time()
         prediction = engine.make_prediction(svs_path=svs_path, location=[analysis_region[0], analysis_region[1]],
-                                            size=[512, 512], save_path=save_path, save_dir=analysis_folder)
-
+                                            on_gpu=on_gpu, size=[512, 512], save_path=save_path, save_dir=analysis_folder)
+        end_time = time.time()
+        prediction_time = end_time - start_time
+        json_data["prediction_time"] = prediction_time
     except Exception as e:
         json_data["status"] = "error"
         json_data["status_message"] = str(e)
 
     if json_data["status"] == "in process":
         try:
+            start_time = time.time()
             engine.overlay_tif_with_pred(svs_path=svs_path, overlay=prediction, save_path=results_folder,
                                          location=[analysis_region[0], analysis_region[1]])
+            end_time = time.time()
+            overlay_time = end_time - start_time
+            json_data["overlay_time"] = overlay_time
             json_data["status"] = "finished"
             json_data["result_image_path"] = f"{results_folder}/result.tif"
         except Exception as e:
