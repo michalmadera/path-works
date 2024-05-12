@@ -10,47 +10,19 @@ import logging
 if logging.getLogger().hasHandlers():
     logging.getLogger().handlers.clear()
 import pyvips
-import copy
 import os
-import random
-import shutil
 import warnings
-from collections import OrderedDict
-from pathlib import Path
 from typing import TYPE_CHECKING, Callable
 
 # Third party imports
-import joblib
-import matplotlib as mpl
+
 import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
-import torch
-import torch.nn.functional as F  # noqa: N812
 
-# Use ujson as replacement for default json because it's faster for large JSON
-import ujson as json
-from sklearn.decomposition import PCA
-from sklearn.linear_model import LogisticRegression as PlattScaling
-from sklearn.metrics import average_precision_score as auprc_scorer
-from sklearn.metrics import roc_auc_score as auroc_scorer
-from sklearn.model_selection import StratifiedKFold, StratifiedShuffleSplit
-from sklearn.preprocessing import StandardScaler
 
-from torch_geometric.nn import (
-    EdgeConv,
-    GINConv,
-    global_add_pool,
-    global_max_pool,
-    global_mean_pool,
-)
 
-from tiatoolbox import logger
 from tiatoolbox.data import stain_norm_target
-from tiatoolbox.models import (
-    IOSegmentorConfig,
 
-)
 
 from tiatoolbox.tools.stainnorm import get_normalizer
 
@@ -58,16 +30,16 @@ from tiatoolbox.wsicore.wsireader import WSIReader
 
 from tiatoolbox import logger
 from tiatoolbox import utils
-from tiatoolbox.tools import stainnorm
+
 if TYPE_CHECKING:  # pragma: no cover
-    from collections.abc import Iterator
+
     from numpy.typing import ArrayLike
 from tiatoolbox.models.engine.semantic_segmentor import (
     IOSegmentorConfig,
     SemanticSegmentor,
 )
 import cv2
-from matplotlib import cm
+
 warnings.filterwarnings("ignore")
 
 
@@ -125,106 +97,44 @@ def save_svs_region(svs_path: str, location: list[int], level: int, size: list[i
     utils.misc.imwrite(save_path, sample)
     return save_path
 
-def overlay_prediction_mask(
-    img: np.ndarray,
-    prediction: np.ndarray,
-    alpha: float = 0.35,
-    label_info: dict | None = None,
-    min_val: float = 0.0,
-    excluded_class: int | None = None,
-    ax: mpl.axes.Axes | None = None,
-    *,
-    return_ax: bool,
-) -> np.ndarray | mpl.axes.Axes:
-    """Generate an overlay, given a 2D prediction map.
+def overlay_prediction_mask(img, prediction, alpha=0.35, label_info=None, min_val=0.0, excluded_classes=None, ax=None, return_ax=False):
+    if img.shape[2] < 4:
+        img = cv2.cvtColor(img, cv2.COLOR_RGB2RGBA)  # ensure image is RGBA
 
-    Args:
-        ...
-        excluded_class (int | None):
-            Identyfikator klasy do wykluczenia z mapy nakładki.
-        ...
+    # Prepare the overlay image with an alpha channel
+    overlay = np.ones((img.shape[0], img.shape[1], 4), dtype=np.uint8) * 255  # white background in RGBA
 
-    Returns:
-        If return_ax is True, return the matplotlib ax object. Else,
-        return the overlay array.
+    # Prepare the RGB prediction mask
+    rgb_prediction = np.zeros((prediction.shape[0], prediction.shape[1], 3), dtype=np.uint8)
 
-    """
-    # Validate inputs
-    if img.shape[:2] != prediction.shape[:2]:
-        msg = (
-            f"Mismatch shape `img` {img.shape[:2]} "
-            f"vs `prediction` {prediction.shape[:2]}."
-        )
-        raise ValueError(
-            msg,
-        )
-    if np.issubdtype(img.dtype, np.floating):
-        if not (img.max() <= 1.0 and img.min() >= 0):
-            msg = "Not support float `img` outside [0, 1]."
-            raise ValueError(msg)
-        img = np.array(img * 255, dtype=np.uint8)
-    # If `min_val` is defined, only display the overlay for areas with pred > min_val
-    if min_val > 0:
-        prediction_sel = prediction >= min_val
+    # Apply colors based on the prediction mask
+    for label_uid, (_, overlay_rgb) in (label_info or {}).items():
+        if excluded_classes and label_uid in excluded_classes:
+            continue  # Skip excluded classes
+        mask = prediction == label_uid
+        rgb_prediction[mask] = np.array(overlay_rgb, dtype=np.uint8)
 
-    overlay = np.ones_like(img) * 255  # Set white background
+    # Perform weighted addition
+    result_rgb = cv2.addWeighted(rgb_prediction, alpha, overlay[:, :, :3], 1 - alpha, 0)
 
-    predicted_classes = sorted(np.unique(prediction).tolist())
-    rand_state = np.random.default_rng().__getstate__()
-    rng = np.random.default_rng(123)
-    label_info = label_info or {  # Use label_info if provided OR generate
-        label_uid: (str(label_uid), rng.integers(0, 255, 3))
-        for label_uid in predicted_classes
-    }
-    np.random.default_rng().__setstate__(rand_state)
+    # Combine result with the alpha channel
+    overlay[:, :, :3] = result_rgb
+    overlay[:, :, 3] = 255  # Fully opaque by default
 
-    missing_label_uids = _validate_label_info(label_info, predicted_classes)
-    if len(missing_label_uids) != 0:
-        msg = f"Missing label for: {missing_label_uids}."
-        raise ValueError(msg)
-
-    rgb_prediction = np.zeros(
-        [prediction.shape[0], prediction.shape[1], 3],
-        dtype=np.uint8,
-    )
-    for label_uid, (_, overlay_rgb) in label_info.items():
-        if label_uid == excluded_class:  # If excluded class, set background to white
-            overlay_rgb = [255, 255, 255]
-        sel = prediction == label_uid
-        rgb_prediction[sel] = overlay_rgb
-
-    cv2.addWeighted(rgb_prediction, alpha, overlay, 1 - alpha, 0, overlay)
-    overlay = overlay.astype(np.uint8)
-
-    if min_val > 0.0:
-        overlay[~prediction_sel] = img[~prediction_sel]
+    # Set alpha to 0 where classes are to be excluded (transparent areas)
+    if excluded_classes:
+        for class_id in excluded_classes:
+            overlay[prediction == class_id, 3] = 0  # make excluded classes fully transparent
 
     if ax is None and not return_ax:
         return overlay
 
-    name_list, color_list = zip(*label_info.values())
-    color_list = np.array(color_list) / 255
-    uid_list = list(label_info.keys())
-    cmap = mpl.colors.ListedColormap(color_list)
-
-    colorbar_params = {
-        "mappable": mpl.cm.ScalarMappable(cmap=cmap),
-        "boundaries": [*uid_list, uid_list[-1] + 1],
-        "values": uid_list,
-        "ticks": [b + 0.5 for b in uid_list],
-        "spacing": "proportional",
-        "orientation": "vertical",
-    }
-
     if ax is None:
         _, ax = plt.subplots()
-    ax.imshow(overlay)
+    ax.imshow(cv2.cvtColor(overlay, cv2.COLOR_RGBA2RGB))
     ax.axis("off")
-    cbar = plt.colorbar(**colorbar_params, ax=ax)
-    cbar.ax.set_yticklabels(name_list)
-    cbar.ax.tick_params(labelsize=12)
+    return ax if return_ax else overlay
 
-    return ax
 
 def _validate_label_info(
     label_info: dict[int, tuple[str, ArrayLike]],
@@ -370,7 +280,7 @@ def make_prediction(svs_path: str, location: list[int], size: list[int], save_pa
     colors = [
         (0, 1, 0),  # Zielony
         (1, 1, 0),  # Żółty
-        (1, 0, 1),  # Magenta
+        (1, 0.5, 0), #Pomarańczowy
         (0, 1, 1),  # Cyjan
         (1, 1, 1)  # Biały
     ]
@@ -378,12 +288,12 @@ def make_prediction(svs_path: str, location: list[int], size: list[int], save_pa
         label_color_dict[label] = (class_name, 255 * np.array(colors[label]))
     # Creat overlay map using the `overlay_prediction_mask` helper function
     overlay = overlay_prediction_mask(
-        wsi_overview,
-        wsi_prediction,
+        img=wsi_overview,
+        prediction=wsi_prediction,
         alpha=0.3,
         label_info=label_color_dict,
-        excluded_class=4,
-        return_ax=False,
+        excluded_classes=[1, 2, 3, 4],  # Lista identyfikatorów klas do wykluczenia
+        return_ax=False
     )
 
     #to zostawiam jakby trzeba było zrobić legendę
@@ -402,31 +312,49 @@ def make_prediction(svs_path: str, location: list[int], size: list[int], save_pa
     #                                       markerfacecolor=color / 255, markersize=10))
 
 
-    new_overlay = np.zeros((*overlay.shape[:2], 4), dtype=np.uint8)
-    new_overlay[:, :, :3] = overlay
-    new_overlay[:, :, 3] = 255
-    white_pixels = np.all(new_overlay[:, :, :3] == [255, 255, 255], axis=-1)
-    new_overlay[white_pixels, 3] = 0
+    if overlay.shape[2] == 3:
+        overlay = cv2.cvtColor(overlay, cv2.COLOR_BGR2BGRA)
+
+    new_overlay = np.zeros((*overlay.shape[:2], 4), dtype=np.uint8)  # Create a new RGBA overlay
+    new_overlay[:, :, :3] = overlay[:, :, :3]  # Copy the RGB channels
+    new_overlay[:, :, 3] = overlay[:, :, 3]    # Copy the alpha channel
 
     return new_overlay
-
 def overlay_tif_with_pred(svs_path: str, overlay: np.ndarray, save_path: str, location: list[int]):
+    # Open the main image using WSIReader and get the thumbnail
     wsi_reader = WSIReader.open(input_img=svs_path)
-
     img1 = wsi_reader.slide_thumbnail(resolution=0, units="level")
-    save_path = os.path.join(save_path, "result.tif")
-    img2 = overlay
-    img2 = cv2.cvtColor(img2, cv2.COLOR_RGBA2RGB)
-    pos_x, pos_y = location[0],  location[1]
-    x_end = pos_x + img2.shape[1]
-    y_end = pos_y + img2.shape[0]
 
+    # Ensure both images are in RGBA to handle transparency
+    if img1.shape[2] == 3:
+        img1 = cv2.cvtColor(img1, cv2.COLOR_BGR2BGRA)
+
+    if overlay.shape[2] == 3:
+        overlay = cv2.cvtColor(overlay, cv2.COLOR_BGR2BGRA)
+
+    # Define position and boundaries
+    pos_x, pos_y = location
+    x_end = min(pos_x + overlay.shape[1], img1.shape[1])
+    y_end = min(pos_y + overlay.shape[0], img1.shape[0])
+
+    # Alpha blending factor
     alpha = 0.5
-    img1_mod = img1.copy()
-    img1_mod[pos_y:y_end, pos_x:x_end] = img1[pos_y:y_end, pos_x:x_end] * alpha + img2 * (1 - alpha)
+    # Apply the overlay on the base image
+    sub_img = img1[pos_y:y_end, pos_x:x_end]
+    sub_overlay = overlay[:y_end-pos_y, :x_end-pos_x]
+    alpha_overlay = sub_overlay[:, :, 3] / 255.0
+    alpha_background = 1.0 - alpha_overlay * alpha  # adjusted alpha for background based on overlay alpha
 
-    img1_mod_rgb = cv2.cvtColor(img1_mod, cv2.COLOR_BGR2RGB)
-    img1_mod_vips = pyvips.Image.new_from_memory(img1_mod_rgb.data, img1_mod_rgb.shape[1], img1_mod_rgb.shape[0],
-                                                 img1_mod_rgb.shape[2], 'uchar')
+    # Blend the overlay and the image
+    for c in range(3):  # RGB channels
+        sub_img[:, :, c] = (alpha_background * sub_img[:, :, c] + alpha_overlay * alpha * sub_overlay[:, :, c])
 
-    img1_mod_vips.write_to_file(save_path, tile=True, compression="jpeg")
+    # Convert back to RGB for saving if needed
+    img1_rgb = cv2.cvtColor(img1, cv2.COLOR_BGRA2BGR)
+    img1_vips = pyvips.Image.new_from_memory(img1_rgb.data, img1_rgb.shape[1], img1_rgb.shape[0], img1_rgb.shape[2], 'uchar')
+
+    # Define the full path and save using PyVIPS
+    save_full_path = os.path.join(save_path, "result.tif")
+    img1_vips.write_to_file(save_full_path, tile=True, compression="jpeg")
+
+    return save_full_path
