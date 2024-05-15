@@ -1,6 +1,9 @@
 from celery import Celery
+import os
 
-celery_app = Celery('tasks', broker='redis://localhost:6379/0', backend='redis://localhost:6379/0')
+redis_url = os.getenv('REDIS_URL', 'redis://redis:6379/0')
+
+celery_app = Celery('tasks', broker=redis_url, backend=redis_url)
 
 celery_app.conf.task_routes = {
     'tasks.perform_analysis': {'queue': 'analysis_queue'}
@@ -14,4 +17,4 @@ celery_app.conf.update(
     enable_utc=True,
 )
 
-celery_app.autodiscover_tasks(['tasks'])
+celery_app.autodiscover_tasks(['src'])

@@ -1,0 +1,39 @@
+version: '3.8'
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: fastapi_app
+    volumes:
+      - ./DATA:/DATA
+      - ./RESULTS:/RESULTS
+    ports:
+      - "8000:8000"
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - ON_GPU=FALSE # or TRUE, depending on your setup
+    depends_on:
+      - redis
+      - celery_worker
+
+  celery_worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.celery
+    container_name: celery_worker
+    volumes:
+      - ./DATA:/DATA
+      - ./RESULTS:/RESULTS
+    depends_on:
+      - redis
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - ON_GPU=FALSE # or TRUE, depending on your setup
+
+  redis:
+    image: redis:6.2.14
+    container_name: redis
+    ports:
+      - "6379:6379"

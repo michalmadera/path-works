@@ -1,7 +1,7 @@
 import os
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from pydantic import BaseModel
-from tasks import perform_analysis
+from .tasks import perform_analysis
 import json
 app = FastAPI()
 
@@ -14,7 +14,7 @@ async def analyze_wsi(svs_path: str, analysis_type: int, analysis_parameters: An
     analysis_parameters = analysis_parameters.dict()
     svs_path = svs_path.strip('"')
 
-    results_dir = "RESULTS"
+    results_dir = "/RESULTS"
     if not os.path.exists(results_dir):
         os.makedirs(results_dir)
 
@@ -30,7 +30,7 @@ async def analyze_wsi(svs_path: str, analysis_type: int, analysis_parameters: An
 
 @app.get("/checkStatus")
 async def check_status(analysis_id: str):
-    file_path = find_results_path("RESULTS", analysis_id)
+    file_path = find_results_path("/RESULTS", analysis_id)
     if not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail=f"File for analysis ID {analysis_id} not found")
 

@@ -1,0 +1,19 @@
+FROM python:3.10
+
+WORKDIR /segm-api
+
+COPY requirements.txt .
+COPY ./src ./src
+COPY ./analysis ./analysis
+COPY README.md README.md
+
+RUN apt-get update && apt-get install -y \
+    ffmpeg \
+    libsm6 \
+    libxext6 \
+    libvips \
+ && rm -rf /var/lib/apt/lists/*
+
+RUN pip install --no-cache-dir -r requirements.txt
+
+CMD ["celery", "-A", "src.tasks", "worker", "--loglevel=info"]

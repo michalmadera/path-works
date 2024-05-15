@@ -3,8 +3,8 @@ import json
 import time
 import cv2
 import numpy as np
-from celery_app import celery_app
-import segmentation_engine as engine
+from .celery_app import celery_app
+from . import segmentation_engine as engine
 from pydantic import BaseModel
 
 class AnalysisParameters(BaseModel):
@@ -25,7 +25,7 @@ def perform_analysis(self, svs_path: str, analysis_type: int, analysis_parameter
     on_gpu = os.getenv('ON_GPU', 'false').lower() in ['true', '1', 't', 'y', 'yes']
 
     analysis_dir = "analysis"
-    results_dir = "RESULTS"
+    results_dir = "/RESULTS"
 
     analysis_folder = os.path.join(analysis_dir, analysis_id)
     results_folder = os.path.join(results_dir, analysis_id)
