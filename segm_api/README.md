@@ -4,13 +4,18 @@
 In the selected localization, create two folders for data and results, for example:
 mkdir DATA
 
-## Running Container
-To run the container, execute the following command:
-docker run -v "$(pwd)/DATA:/DATA" -v "$(pwd)/RESULTS:/RESULTS" -p 8000:8000 -e "ON_GPU=TRUE" --gpus all -d segm_api
-Two folders are mapped: DATA to DATA and RESULTS to RESULTS. Additionally, port 8000 is mapped to 8000, and the `--gpus all` flag ensures the utilization of all available GPUs.
+## Pull containers
+Pull both containers: jkuzn/segm_api-web and jkuzn/segm_api-celery_worker.
 
-To use cpu execute the following command:
-docker run -v "$(pwd)/DATA:DATA" -v "$(pwd)/RESULTS:RESULTS" -p 8000:8000 -e "ON_GPU=FALSE"  -d segm_api
+## Prepare docker-compose and .env file
+Download docker-compose.yml from github and create .env file that looks like below:
+- DATA_VOLUME=/path/to/DATA/folder
+- RESULTS_VOLUME=/path/to/RESULTS/folder 
+- ON_GPU=FALSE
+
+## Running Container
+To run container make sure that docker-compose.yml and .env are in the same place and run belowe command:
+- docker-compose up
 
 ## analyzeWSI Endpoint
 To analyze your image, place it in the data folder. Then, to make a request to the analyzeWSI endpoint, use, for example, Postman. Select the POST method and provide the following parameters:

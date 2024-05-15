@@ -1,4 +1,4 @@
 #!/bin/sh
 
 # Start the Celery worker
-celery -A src.celery_app worker --loglevel=info -Q analysis_queue
+celery -A src.tasks worker --loglevel=info -Q analysis_queue -P solo -E

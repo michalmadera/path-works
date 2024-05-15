@@ -16,4 +16,4 @@ RUN apt-get update && apt-get install -y \
 
 RUN pip install --no-cache-dir -r requirements.txt
 
-CMD ["celery", "-A", "src.tasks", "worker", "--loglevel=info"]
+CMD ["celery", "-A", "src.tasks", "worker", "--loglevel=info", "-Q", "analysis_queue", "-P", "solo", "-E"]

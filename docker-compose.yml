@@ -2,9 +2,7 @@ version: '3.8'
 
 services:
   web:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: jkuzn/segm_api-web:latest
     container_name: fastapi_app
     volumes:
       - ${DATA_VOLUME}:/DATA
@@ -19,9 +17,7 @@ services:
       - celery_worker
 
   celery_worker:
-    build:
-      context: .
-      dockerfile: Dockerfile.celery
+    image: jkuzn/segm_api-celery_worker:latest
     container_name: celery_worker
     volumes:
       - ${DATA_VOLUME}:/DATA
