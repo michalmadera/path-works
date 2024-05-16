@@ -12,6 +12,7 @@ Download docker-compose.yml from github and create .env file that looks like bel
 - DATA_VOLUME=/path/to/DATA/folder
 - RESULTS_VOLUME=/path/to/RESULTS/folder 
 - ON_GPU=FALSE
+- SHM_SIZE=8G 
 
 ## Running Container
 To run container make sure that docker-compose.yml and .env are in the same place and run belowe command:
