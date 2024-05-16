@@ -12,6 +12,7 @@ services:
     environment:
       - REDIS_URL=redis://redis:6379/0
       - ON_GPU=${ON_GPU}
+    shm_size: ${SHM_SIZE}
     depends_on:
       - redis
       - celery_worker
@@ -27,6 +28,7 @@ services:
     environment:
       - REDIS_URL=redis://redis:6379/0
       - ON_GPU=${ON_GPU}
+    shm_size: ${SHM_SIZE}
 
   redis:
     image: redis:6.2.14
