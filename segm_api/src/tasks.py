@@ -22,7 +22,7 @@ def calculate_bounding_box(coordinates):
 def perform_analysis(self, svs_path: str, analysis_type: int, analysis_parameters: dict):
     analysis_id = self.request.id
     print(f"Rozpoczęto analizę: {analysis_id}")
-    print(analysis_id)
+
     on_gpu = os.getenv('ON_GPU', 'false').lower() in ['true', '1', 't', 'y', 'yes']
 
     analysis_dir = "analysis"
@@ -37,6 +37,7 @@ def perform_analysis(self, svs_path: str, analysis_type: int, analysis_parameter
     save_path = os.path.join(analysis_folder, "sample.jpg")
     json_file_path = os.path.join(results_folder, f"{analysis_id}.json")
 
+    # Wczytanie lub utworzenie pliku JSON
     try:
         with open(json_file_path, 'r') as file:
             json_data = json.load(file)
@@ -51,9 +52,12 @@ def perform_analysis(self, svs_path: str, analysis_type: int, analysis_parameter
             "result_json_path": json_file_path,
         }
 
+    with open(json_file_path, 'w') as file:
+        json_data["status"] = "in_process"
+        json.dump(json_data, file)
+
     try:
         start_time = time.time()
-        json_data["status"] = "in_process"
         print(f"Tworzenie maski dla obrazu: {svs_path}")
         result, min_x, min_y = create_mask_for_image(svs_path, analysis_parameters['analysis_region_json'], mask_save_path)
         print(f"Tworzenie predykcji")
@@ -79,7 +83,6 @@ def perform_analysis(self, svs_path: str, analysis_type: int, analysis_parameter
     with open(json_file_path, 'w') as file:
         json.dump(json_data, file)
     print(f"Zakończono analizę: {analysis_id}")
-
 def create_mask_for_image(input_image_path, input_json_path, output_file_path, binary_mask=False):
     if not os.path.exists(input_image_path):
         raise FileNotFoundError(f"No image found at {input_image_path}")

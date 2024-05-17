@@ -19,18 +19,19 @@ To run container make sure that docker-compose.yml and .env are in the same plac
 - docker-compose up
 
 ## analyzeWSI Endpoint
-To analyze your image, place it in the data folder. Then, to make a request to the analyzeWSI endpoint, use, for example, Postman. Select the POST method and provide the following parameters:
-- "svs_path": "/DATA/test.jpg"
-- "analysis_type": 1
-
-
-In the request body in raw section with json option turned on, specify:
+To analyze your image, place it in the data folder. Then, make a request to the analyzeWSI endpoint. For example, using Postman, select the POST method and provide the following JSON body:
 {
+  "svs_path": "/DATA/test.jpg",
+  "analysis_type": 1,
+  "analysis_parameters": {
     "analysis_region_json": "/DATA/0.json",
     "is_normalized": false
+  }
 }
 The function will return an analysis_id of type string:
-"0"
+{
+    "task_id": "3bc182f6-161f-45e4-8053-6bbef9e6cfb4"
+}
 
 To download an example image, use the following link: [Example Image](https://tiatoolbox.dcs.warwick.ac.uk/sample_imgs/breast_tissue.jpg)
 Example region json:
@@ -65,12 +66,13 @@ Example region json:
 }
 
 ## resultReady Endpoint
-The resultReady endpoint takes an analysis_id as input and returns a JSON file with result data. In Postman, select the GET method and provide the following parameter:
-- "analysis_id": 0
+The resultsReady endpoint takes an analysis_id as input and returns a JSON file with result data. In Postman, select the GET method and provide the following parameter in the URL path:
+/resultsReady/{analysis_id}
+
 
 The endpoint returns:
 {
-"analysis_id": "0",
+"analysis_id": "3bc182f6-161f-45e4-8053-6bbef9e6cfb4",
 "svs_path": "/DATA/test.jpg",
 "analysis_type": "1",
 "region": "(0, 0)",
@@ -81,8 +83,8 @@ The endpoint returns:
 }
 
 ## checkStatus Endpoint
-The checkStatus endpoint takes an analysis_id as input and returns analysis status. In Postman, select the GET method and provide the following parameter:
-- "analysis_id": 0
+The checkStatus endpoint takes an analysis_id as input and returns analysis status. In Postman, select the GET method and provide the following parameter in the URL path:
+/checkStatus/{analysis_id}
 
 The endpoint returns:
 "in_process"

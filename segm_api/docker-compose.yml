@@ -1,5 +1,4 @@
 version: '3.8'
-
 services:
   web:
     build:
@@ -7,6 +6,7 @@ services:
       shm_size: '2gb'
       dockerfile: Dockerfile
     container_name: fastapi_app
+    image: jkuzn/segm_api-web:latest
     volumes:
       - ${DATA_VOLUME}:/DATA
       - ${RESULTS_VOLUME}:/RESULTS
@@ -26,6 +26,7 @@ services:
       shm_size: '2gb'
       dockerfile: Dockerfile.celery
     container_name: celery_worker
+    image: jkuzn/segm_api-celery_worker:latest
     volumes:
       - ${DATA_VOLUME}:/DATA
       - ${RESULTS_VOLUME}:/RESULTS

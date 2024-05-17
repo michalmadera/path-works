@@ -3,18 +3,23 @@ from fastapi import FastAPI, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 from .tasks import perform_analysis
 import json
-app = FastAPI()
 
+app = FastAPI()
 
 class AnalysisParameters(BaseModel):
     analysis_region_json: str
     is_normalized: bool
 
+class AnalysisRequest(BaseModel):
+    svs_path: str
+    analysis_type: int
+    analysis_parameters: AnalysisParameters
 
 @app.post("/analyzeWSI")
-async def analyze_wsi(svs_path: str, analysis_type: int, analysis_parameters: AnalysisParameters, background_tasks: BackgroundTasks):
-    analysis_parameters = analysis_parameters.dict()
-    svs_path = svs_path.strip('"')
+async def analyze_wsi(request: AnalysisRequest, background_tasks: BackgroundTasks):
+    analysis_parameters = request.analysis_parameters.dict()
+    svs_path = request.svs_path.strip('"')
+    analysis_type = request.analysis_type
 
     results_dir = "/RESULTS"
     if not os.path.exists(results_dir):
@@ -22,18 +27,18 @@ async def analyze_wsi(svs_path: str, analysis_type: int, analysis_parameters: An
 
     print(f"Wysyłanie zadania Celery: svs_path={svs_path}, analysis_type={analysis_type}, analysis_parameters={analysis_parameters}")
     task = perform_analysis.delay(svs_path, analysis_type, analysis_parameters)
-    analysis_id = task.id
-    print(f"Zadanie Celery wysłane: task_id={analysis_id}")
+    task_id = task.id
+    print(f"Zadanie Celery wysłane: task_id={task_id}")
 
     analysis_dir = "analysis"
-    analysis_folder = os.path.join(analysis_dir, analysis_id)
-    results_folder = os.path.join(results_dir, analysis_id)
+    analysis_folder = os.path.join(analysis_dir, task_id)
+    results_folder = os.path.join(results_dir, task_id)
     os.makedirs(analysis_folder, exist_ok=True)
     os.makedirs(results_folder, exist_ok=True)
 
-    json_file_path = os.path.join(results_folder, f"{analysis_id}.json")
+    json_file_path = os.path.join(results_folder, f"{task_id}.json")
     json_data = {
-        "analysis_id": analysis_id,
+        "analysis_id": task_id,
         "svs_path": svs_path,
         "analysis_type": analysis_type,
         "region_json_path": analysis_parameters['analysis_region_json'],
@@ -45,10 +50,9 @@ async def analyze_wsi(svs_path: str, analysis_type: int, analysis_parameters: An
     with open(json_file_path, 'w') as file:
         json.dump(json_data, file)
 
-    return {"analysis_id": analysis_id}
+    return {"task_id": task_id}
 
-
-@app.get("/checkStatus")
+@app.get("/checkStatus/{analysis_id}")
 async def check_status(analysis_id: str):
     file_path = find_results_path("/RESULTS", analysis_id)
     if not os.path.exists(file_path):
@@ -63,7 +67,6 @@ async def check_status(analysis_id: str):
     status = results_data['status']
     return {"status": status}
 
-
 @app.get("/resultsReady/{analysis_id}")
 async def results_ready(analysis_id: str):
     file_path = find_results_path("/RESULTS", analysis_id)
@@ -76,12 +79,10 @@ async def results_ready(analysis_id: str):
 
     return results_data
 
-
 def find_results_path(results_dir, analysis_id):
     results_dir = os.path.join(results_dir, f"{analysis_id}")
     file_path = os.path.join(results_dir, f"{analysis_id}.json")
     return file_path
-
 
 if __name__ == "__main__":
     import uvicorn
