@@ -19,9 +19,10 @@ def calculate_bounding_box(coordinates):
     return (min_x, min_y, max_x, max_y)
 
 @celery_app.task(bind=True, name='tasks.perform_analysis')
-def perform_analysis(self, svs_path: str, analysis_type: int, analysis_parameters: dict, analysis_id: str):
+def perform_analysis(self, svs_path: str, analysis_type: int, analysis_parameters: dict):
+    analysis_id = self.request.id
     print(f"Rozpoczęto analizę: {analysis_id}")
-
+    print(analysis_id)
     on_gpu = os.getenv('ON_GPU', 'false').lower() in ['true', '1', 't', 'y', 'yes']
 
     analysis_dir = "analysis"
@@ -36,22 +37,23 @@ def perform_analysis(self, svs_path: str, analysis_type: int, analysis_parameter
     save_path = os.path.join(analysis_folder, "sample.jpg")
     json_file_path = os.path.join(results_folder, f"{analysis_id}.json")
 
-    json_data = {
-        "analysis_id": analysis_id,
-        "svs_path": svs_path,
-        "analysis_type": analysis_type,
-        "region_json_path": analysis_parameters['analysis_region_json'],
-        "is_normalized": analysis_parameters['is_normalized'],
-        "status": "in_process",
-        "result_json_path": json_file_path,
-        "on_gpu": on_gpu
-    }
-
-    with open(json_file_path, 'w') as file:
-        json.dump(json_data, file)
+    try:
+        with open(json_file_path, 'r') as file:
+            json_data = json.load(file)
+    except IOError:
+        json_data = {
+            "analysis_id": analysis_id,
+            "svs_path": svs_path,
+            "analysis_type": analysis_type,
+            "region_json_path": analysis_parameters['analysis_region_json'],
+            "is_normalized": analysis_parameters['is_normalized'],
+            "status": "in_process",
+            "result_json_path": json_file_path,
+        }
 
     try:
         start_time = time.time()
+        json_data["status"] = "in_process"
         print(f"Tworzenie maski dla obrazu: {svs_path}")
         result, min_x, min_y = create_mask_for_image(svs_path, analysis_parameters['analysis_region_json'], mask_save_path)
         print(f"Tworzenie predykcji")
