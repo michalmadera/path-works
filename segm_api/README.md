@@ -30,10 +30,10 @@ To analyze your image, place it in the data folder. Then, make a request to the 
 }
 The function will return an analysis_id of type string:
 {
-    "task_id": "3bc182f6-161f-45e4-8053-6bbef9e6cfb4"
+    "analysis_id": "3bc182f6-161f-45e4-8053-6bbef9e6cfb4"
 }
 
-To download an example image, use the following link: [Example Image](https://tiatoolbox.dcs.warwick.ac.uk/sample_imgs/breast_tissue.jpg)
+To download an example image, use the following link: [Example Image](https://tiatoolbox.dcs.warwick.ac.uk/sample_imgs/breast_tissue.jpg), [Svs example image](https://tiatoolbox.dcs.warwick.ac.uk/sample_wsis/wsi4_12k_12k.svs), [Large image example](https://tiatoolbox.dcs.warwick.ac.uk/sample_wsis/CMU-1.ndpi)
 Example region json:
 {
   "type": null,

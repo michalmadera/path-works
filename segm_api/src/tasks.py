@@ -79,10 +79,11 @@ def perform_analysis(self, svs_path: str, analysis_type: int, analysis_parameter
     except Exception as e:
         json_data["status"] = "error"
         json_data["status_message"] = str(e)
-
-    with open(json_file_path, 'w') as file:
-        json.dump(json_data, file)
+    finally:
+        with open(json_file_path, 'w') as file:
+            json.dump(json_data, file)
     print(f"Zakończono analizę: {analysis_id}")
+
 def create_mask_for_image(input_image_path, input_json_path, output_file_path, binary_mask=False):
     if not os.path.exists(input_image_path):
         raise FileNotFoundError(f"No image found at {input_image_path}")
