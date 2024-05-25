@@ -6,34 +6,40 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: fastapi_app
+    image: jkuzn/segm_api-web:latest
+    volumes:
+      - ${DATA_VOLUME}:/DATA
+      - ${RESULTS_VOLUME}:/RESULTS
     ports:
       - "8000:8000"
-    volumes:
-      - ./DATA:/DATA
-      - ./RESULTS:/RESULTS
-    depends_on:
-      - redis
     environment:
       - REDIS_URL=redis://redis:6379/0
-      - ON_GPU=FALSE # or TRUE, depending on your setup
+      - ON_GPU=${ON_GPU}
+      - results_ready_callback_url=${results_ready_callback_url}
+    shm_size: ${SHM_SIZE}
+    depends_on:
+      - redis
+      - celery_worker
 
-  worker:
+  celery_worker:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.celery
     container_name: celery_worker
-    command: ["/segm-api/start_celery.sh"]
+    image: jkuzn/segm_api-celery_worker:latest
     volumes:
-      - ./DATA:/DATA
-      - ./RESULTS:/RESULTS
-    depends_on:
-      - redis
+      - ${DATA_VOLUME}:/DATA
+      - ${RESULTS_VOLUME}:/RESULTS
     environment:
       - REDIS_URL=redis://redis:6379/0
-      - ON_GPU=FALSE # or TRUE, depending on your setup
+      - ON_GPU=${ON_GPU}
+      - results_ready_callback_url=${results_ready_callback_url}
+    shm_size: ${SHM_SIZE}
+    depends_on:
+      - redis
 
   redis:
-    image: redis:6.2
+    image: redis:6.2.14
     container_name: redis
     ports:
       - "6379:6379"
