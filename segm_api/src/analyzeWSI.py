@@ -1,5 +1,5 @@
 import os
-from fastapi import FastAPI, HTTPException, APIRouter
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from .tasks import perform_analysis
 import json

@@ -1,6 +1,5 @@
 FROM nvidia/cuda:11.8.0-runtime-ubuntu20.04
 
-# Instalacja zależności systemowych, Pythona 3.10 i narzędzi kompilacyjnych
 RUN apt-get update && apt-get install -y software-properties-common wget
 RUN add-apt-repository ppa:deadsnakes/ppa
 RUN apt-get update && apt-get install -y \

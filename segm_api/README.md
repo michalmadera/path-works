@@ -31,6 +31,7 @@ Download docker-compose.yml from github and create .env file that looks like bel
 - ON_GPU=FALSE
 - SHM_SIZE=8G 
 - results_ready_callback_url=http://localhost:8000/resultsReadyCallbackTester/
+
 ## Running the container
 To run container make sure that docker-compose.yml and .env are in the same place and run belowe command:
 - docker-compose up

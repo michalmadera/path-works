@@ -68,24 +68,13 @@ def semantic_seg_engine(
         mode=mode,
         on_gpu=on_gpu,
         resolution=1.0,
-        units="baseline",
+        units="power",
         patch_input_shape=[1024, 1024],
         patch_output_shape=[512, 512],
         stride_shape=[128, 128],
         crash_on_exception=True,
     )
     return output
-
-
-
-
-def stain_norm_func(img: np.ndarray) -> np.ndarray:
-    target_image = stain_norm_target()
-    stain_normalizer = get_normalizer("macenko")
-    stain_normalizer.fit(target_image)
-    """Helper function to perform stain normalization."""
-    return stain_normalizer.transform(img)
-
 
 def save_svs_region(svs_path: str, location: list[int], level: int, size: list[int], save_path: str) -> str:
     wsi_reader = WSIReader.open(input_img=svs_path)
@@ -94,8 +83,19 @@ def save_svs_region(svs_path: str, location: list[int], level: int, size: list[i
         level=level,
         size=size,
     )
-    utils.misc.imwrite(save_path, sample)
-    return save_path
+
+    # Convert to RGB if necessary
+    if sample.shape[2] == 4:
+        sample = cv2.cvtColor(sample, cv2.COLOR_BGRA2BGR)
+
+    # Convert to PyVips image
+    sample_vips = pyvips.Image.new_from_memory(sample.data, sample.shape[1], sample.shape[0], sample.shape[2], 'uchar')
+
+    # Save as TIFF
+    save_full_path = save_path.replace('.svs', '.tif')
+    sample_vips.write_to_file(save_full_path, tile=True, compression="jpeg")
+
+    return save_full_path
 
 def overlay_prediction_mask(img, prediction, alpha=0.35, label_info=None, min_val=0.0, excluded_classes=None, ax=None, return_ax=False):
     if img.shape[2] < 4:
@@ -199,7 +199,10 @@ def _validate_label_info(
 
     return check_uid_list
 
-def make_prediction(svs_path: str, location: list[int], size: list[int], save_path: str, save_dir: str, level: int = 0, on_gpu = True) -> np.ndarray:
+
+def make_prediction(svs_path: str, location: list[int], size: list[int], save_path: str, save_dir: str, level: int = 0,
+                    on_gpu=True) -> np.ndarray:
+
     sample_path = save_svs_region(svs_path=svs_path, location=location, level=level, size=size, save_path=save_path)
     output_save_dir = os.path.join(save_dir, "output")
     output_list = semantic_seg_engine(
@@ -208,8 +211,6 @@ def make_prediction(svs_path: str, location: list[int], size: list[int], save_pa
         save_dir=output_save_dir,
         mode="tile",
         on_gpu=on_gpu
-        #preproc_func tylko jeżeli mamy pewność że zdjęcie nie zostało wcześniej znormalizowane
-        #preproc_func=stain_norm_func
     )
 
     bcc_wsi_ioconfig = IOSegmentorConfig(
@@ -217,7 +218,7 @@ def make_prediction(svs_path: str, location: list[int], size: list[int], save_pa
         output_resolutions=[{"units": "mpp", "resolution": 0.25}],
         patch_input_shape=[1024, 1024],
         patch_output_shape=[512, 512],
-        stride_shape=[512, 512],
+        stride_shape=[128, 128],
         save_resolution={"units": "mpp", "resolution": 2},
     )
     logger.info(
@@ -247,8 +248,8 @@ def make_prediction(svs_path: str, location: list[int], size: list[int], save_pa
     )
 
     # [WSI overview extraction]
-    # Now reading the WSI to extract it's overview
-    wsi = WSIReader.open(output_list[0][0], mpp=2)
+    # Now reading the WSI to extract its overview
+    wsi = WSIReader.open(output_list[0][0], power=1, mpp=2)
     logger.info(
         "WSI original dimensions: (%d, %d)",
         wsi.info.slide_dimensions[0],
@@ -269,9 +270,6 @@ def make_prediction(svs_path: str, location: list[int], size: list[int], save_pa
         wsi_overview.shape[1],
     )
 
-    # plt.figure(), plt.imshow(wsi_overview)
-    # plt.axis("off")
-
     # [Overlay map creation]
     # creating label-color dictionary to be fed into `overlay_prediction_mask` function
     # to help generating color legend
@@ -280,13 +278,14 @@ def make_prediction(svs_path: str, location: list[int], size: list[int], save_pa
     colors = [
         (1, 1, 0),  # Żółty
         (0, 1, 0),  # Zielony
-        (1, 0.5, 0), #Pomarańczowy
+        (1, 0.5, 0),  # Pomarańczowy
         (0, 1, 1),  # Cyjan
         (1, 1, 1)  # Biały
     ]
     for class_name, label in label_dict.items():
         label_color_dict[label] = (class_name, 255 * np.array(colors[label]))
-    # Creat overlay map using the `overlay_prediction_mask` helper function
+
+    # Create overlay map using the `overlay_prediction_mask` helper function
     overlay = overlay_prediction_mask(
         img=wsi_overview,
         prediction=wsi_prediction,
@@ -296,33 +295,18 @@ def make_prediction(svs_path: str, location: list[int], size: list[int], save_pa
         return_ax=False
     )
 
-    #to zostawiam jakby trzeba było zrobić legendę
-    # legend_elements = []
-    # label_dict = {"Tumour": 0, "Stroma": 1, "Inflamatory": 2, "Necrosis": 3}
-    # colors = [
-    #     (0, 1, 0),  # Zielony
-    #     (1, 1, 0),  # Żółty
-    #     (1, 0, 1),  # Magenta
-    #     (0, 1, 1),  # Cyjan
-    #     (1, 1, 1)  # Biały
-    # ]
-    # for class_name, label in label_dict.items():
-    #     color = 255 * np.array(colors[label])
-    #     legend_elements.append(plt.Line2D([0], [0], marker='o', color='w', label=class_name,
-    #                                       markerfacecolor=color / 255, markersize=10))
-
-
+    # Ensure overlay is in RGBA format
     if overlay.shape[2] == 3:
         overlay = cv2.cvtColor(overlay, cv2.COLOR_BGR2BGRA)
 
     new_overlay = np.zeros((*overlay.shape[:2], 4), dtype=np.uint8)  # Create a new RGBA overlay
     new_overlay[:, :, :3] = overlay[:, :, :3]  # Copy the RGB channels
-    new_overlay[:, :, 3] = overlay[:, :, 3]    # Copy the alpha channel
+    new_overlay[:, :, 3] = overlay[:, :, 3]  # Copy the alpha channel
 
     return new_overlay
 def overlay_tif_with_pred(svs_path: str, overlay: np.ndarray, save_path: str, location: list[int]):
     # Open the main image using WSIReader and get the thumbnail
-    wsi_reader = WSIReader.open(input_img=svs_path)
+    wsi_reader = WSIReader.open(input_img=svs_path, power=1)
     img1 = wsi_reader.slide_thumbnail(resolution=0, units="level")
 
     # Ensure both images are in RGBA to handle transparency

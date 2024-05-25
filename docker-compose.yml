@@ -23,7 +23,6 @@ services:
           devices:
             - capabilities: [gpu]
     runtime: nvidia
-
   celery_worker:
     image: jkuzn/segm_api-celery_worker:latest
     container_name: celery_worker
