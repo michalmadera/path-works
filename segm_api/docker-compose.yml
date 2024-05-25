@@ -1,9 +1,9 @@
 version: '3.8'
+
 services:
   web:
     build:
       context: .
-      shm_size: '2gb'
       dockerfile: Dockerfile
     container_name: fastapi_app
     image: jkuzn/segm_api-web:latest
@@ -15,15 +15,21 @@ services:
     environment:
       - REDIS_URL=redis://redis:6379/0
       - ON_GPU=${ON_GPU}
+      - results_ready_callback_url=${results_ready_callback_url}
     shm_size: ${SHM_SIZE}
     depends_on:
       - redis
       - celery_worker
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: [gpu]
+    runtime: nvidia
 
   celery_worker:
     build:
       context: .
-      shm_size: '2gb'
       dockerfile: Dockerfile.celery
     container_name: celery_worker
     image: jkuzn/segm_api-celery_worker:latest
@@ -33,9 +39,16 @@ services:
     environment:
       - REDIS_URL=redis://redis:6379/0
       - ON_GPU=${ON_GPU}
+      - results_ready_callback_url=${results_ready_callback_url}
     shm_size: ${SHM_SIZE}
     depends_on:
       - redis
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: [gpu]
+    runtime: nvidia
 
   redis:
     image: redis:6.2.14

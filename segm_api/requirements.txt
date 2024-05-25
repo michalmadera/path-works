@@ -13,5 +13,5 @@ torch==2.1.2
 torch_geometric==2.5.3
 ujson==5.9.0
 uvicorn==0.29.0
-celery
 redis
+kombu

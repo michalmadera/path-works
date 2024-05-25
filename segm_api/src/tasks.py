@@ -3,6 +3,8 @@ import json
 import time
 import cv2
 import numpy as np
+import requests
+import asyncio
 from .celery_app import celery_app
 from . import segmentation_engine as engine
 from pydantic import BaseModel
@@ -10,6 +12,20 @@ from pydantic import BaseModel
 class AnalysisParameters(BaseModel):
     analysis_region_json: str
     is_normalized: bool
+
+async def call_results_ready(analysis_id: str, api_url):
+    payload = {
+        "analysis_id": analysis_id
+    }
+    print(f"Calling results ready callback for analysis_id: {analysis_id} to URL: {api_url}")
+    try:
+        response = requests.post(api_url, json=payload)
+        if response.status_code == 200:
+            print(f"Successfully called results ready callback for analysis_id: {analysis_id}")
+        else:
+            print(f"Error calling results ready callback: {response.status_code} - {response.text}")
+    except Exception as e:
+        print(f"Exception during calling results ready callback: {str(e)}")
 
 def calculate_bounding_box(coordinates):
     min_x = min(point['x'] for point in coordinates)
@@ -21,9 +37,12 @@ def calculate_bounding_box(coordinates):
 @celery_app.task(bind=True, name='tasks.perform_analysis')
 def perform_analysis(self, svs_path: str, analysis_type: int, analysis_parameters: dict):
     analysis_id = self.request.id
-    print(f"Rozpoczęto analizę: {analysis_id}")
+    print(f"Started analysis: {analysis_id}")
 
     on_gpu = os.getenv('ON_GPU', 'false').lower() in ['true', '1', 't', 'y', 'yes']
+    print(f"Using GPU: {on_gpu}")
+    api_url = os.getenv("results_ready_callback_url")
+    print(f"Callback URL: {api_url}")
 
     analysis_dir = "analysis"
     results_dir = "/RESULTS"
@@ -37,7 +56,7 @@ def perform_analysis(self, svs_path: str, analysis_type: int, analysis_parameter
     save_path = os.path.join(analysis_folder, "sample.jpg")
     json_file_path = os.path.join(results_folder, f"{analysis_id}.json")
 
-    # Wczytanie lub utworzenie pliku JSON
+    # Load or create JSON file
     try:
         with open(json_file_path, 'r') as file:
             json_data = json.load(file)
@@ -58,18 +77,18 @@ def perform_analysis(self, svs_path: str, analysis_type: int, analysis_parameter
 
     try:
         start_time = time.time()
-        print(f"Tworzenie maski dla obrazu: {svs_path}")
+        print(f"Creating mask for image: {svs_path}")
         result, min_x, min_y = create_mask_for_image(svs_path, analysis_parameters['analysis_region_json'], mask_save_path)
-        print(f"Tworzenie predykcji")
+        print(f"Creating prediction")
         prediction = engine.make_prediction(svs_path=svs_path, location=[0, 0], on_gpu=on_gpu, size=[result.shape[1], result.shape[0]], save_path=save_path, save_dir=analysis_folder)
-        print(f"Przycinanie maski z predykcji")
+        print(f"Cutting mask from prediction")
         triangle = cut_mask_from_array(prediction, analysis_parameters['analysis_region_json'], min_x, min_y)
         end_time = time.time()
         prediction_time = end_time - start_time
         json_data["prediction_time"] = prediction_time
 
         start_time = time.time()
-        print(f"Nakładanie predykcji na obraz")
+        print(f"Overlaying prediction on image")
         engine.overlay_tif_with_pred(svs_path=svs_path, overlay=triangle, save_path=results_folder, location=[min_x, min_y])
         end_time = time.time()
         overlay_time = end_time - start_time
@@ -82,7 +101,13 @@ def perform_analysis(self, svs_path: str, analysis_type: int, analysis_parameter
     finally:
         with open(json_file_path, 'w') as file:
             json.dump(json_data, file)
-    print(f"Zakończono analizę: {analysis_id}")
+        # Call resultsReady service
+        try:
+            print(f"Attempting to call results ready for analysis_id: {analysis_id}")
+            asyncio.run(call_results_ready(analysis_id, api_url))
+        except Exception as e:
+            print(f"Error while calling call_results_ready: {str(e)}")
+    print(f"Analysis completed: {analysis_id}")
 
 def create_mask_for_image(input_image_path, input_json_path, output_file_path, binary_mask=False):
     if not os.path.exists(input_image_path):

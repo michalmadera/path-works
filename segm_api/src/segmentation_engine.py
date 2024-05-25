@@ -278,8 +278,8 @@ def make_prediction(svs_path: str, location: list[int], size: list[int], save_pa
     label_dict = {"Tumour": 0, "Stroma": 1, "Inflamatory": 2, "Necrosis": 3, "Others": 4}
     label_color_dict = {}
     colors = [
-        (0, 1, 0),  # Zielony
         (1, 1, 0),  # Żółty
+        (0, 1, 0),  # Zielony
         (1, 0.5, 0), #Pomarańczowy
         (0, 1, 1),  # Cyjan
         (1, 1, 1)  # Biały
