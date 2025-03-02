@@ -1,5 +1,6 @@
 FROM nvidia/cuda:11.8.0-runtime-ubuntu20.04
 
+# Instalacja niezbędnych pakietów systemowych
 RUN apt-get update && apt-get install -y software-properties-common wget
 RUN add-apt-repository ppa:deadsnakes/ppa
 RUN apt-get update && apt-get install -y \
@@ -18,9 +19,16 @@ RUN apt-get update && apt-get install -y \
 # Instalacja PIP za pomocą get-pip.py
 RUN wget https://bootstrap.pypa.io/get-pip.py
 RUN python3.10 get-pip.py
+RUN rm get-pip.py
 
 # Ustawienie Pythona 3.10 jako domyślnego
 RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.10 1
+
+# Tworzenie pliku swap dla dodatkowej pamięci wirtualnej
+RUN mkdir -p /swap && \
+    dd if=/dev/zero of=/swap/swapfile bs=1M count=16384 && \
+    chmod 600 /swap/swapfile && \
+    mkswap /swap/swapfile
 
 WORKDIR /segm-api
 
@@ -32,11 +40,29 @@ COPY README.md README.md
 # Upgrade pip
 RUN python3.10 -m pip install --upgrade pip
 
+# Instalacja pakietu Redis osobno
+RUN python3.10 -m pip install --no-cache-dir redis>=4.5.0
+
 # Instalacja PyTorch z obsługą CUDA
-RUN python3.10 -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+RUN python3.10 -m pip install --no-cache-dir torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+
+# Instalacja psutil do monitorowania zasobów
+RUN python3.10 -m pip install --no-cache-dir psutil
 
 # Instalacja pozostałych zależności
 RUN python3.10 -m pip install --no-cache-dir -r requirements.txt --default-timeout=100 future
 
-# Komenda startowa
-CMD ["celery", "-A", "src.tasks", "worker", "--loglevel=info", "-Q", "analysis_queue", "-P", "solo", "-E"]
+# Konfiguracja zmiennych środowiskowych dla Pythona
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONMALLOC=malloc
+ENV PYTHONIOENCODING=UTF-8
+ENV MALLOC_TRIM_THRESHOLD_=65536
+
+# Aktywuj swap przed uruchomieniem celery (WAŻNE: bez ENTRYPOINT)
+RUN echo '#!/bin/bash\nswapon /swap/swapfile 2>/dev/null || true\nexec "$@"' > /usr/local/bin/docker-entrypoint.sh && \
+    chmod +x /usr/local/bin/docker-entrypoint.sh
+
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
+
+# Teraz możesz bezpiecznie używać Twojej preferowanej składni CMD
+CMD ["celery", "-A", "src.tasks", "worker", "--loglevel=info", "-Q", "analysis_queue", "-P", "solo", "-E", "--max-tasks-per-child=1", "--max-memory-per-child=52428800"]

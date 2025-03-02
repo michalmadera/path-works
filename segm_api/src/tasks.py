@@ -1,71 +1,147 @@
 import os
-os.environ["OPENCV_IO_MAX_IMAGE_PIXELS"] = str(pow(2,40))
+
+os.environ["OPENCV_IO_MAX_IMAGE_PIXELS"] = str(pow(2, 40))
+
 import json
 import time
 import cv2
-import requests
+import aiohttp
 import asyncio
 import numpy as np
-import pyvips
+from pathlib import Path
+from typing import List, Tuple, Dict, Any
+from pydantic import BaseModel
+
+from tiatoolbox import logger
 from tiatoolbox.wsicore.wsireader import WSIReader
 from .celery_app import celery_app
 from . import segmentation_engine as engine
-from pydantic import BaseModel
+
 
 class AnalysisParameters(BaseModel):
     analysis_region_json: str
     is_normalized: bool
 
-def calculate_bounding_box(coordinates):
+
+def calculate_bounding_box(coordinates: List[List[float]]) -> Tuple[int, int, int, int]:
+    """Oblicza prostokąt ograniczający dla zestawu współrzędnych."""
     if isinstance(coordinates[0][0], list):
         coordinates = coordinates[0]
-    min_x = min(int(coord[0]) for coord in coordinates)
-    max_x = max(int(coord[0]) for coord in coordinates)
-    min_y = min(int(coord[1]) for coord in coordinates)
-    max_y = max(int(coord[1]) for coord in coordinates)
-    return (min_x, min_y, max_x, max_y)
+    coords = np.array(coordinates, dtype=np.int32)
+    min_x, min_y = coords.min(axis=0)
+    max_x, max_y = coords.max(axis=0)
+    return min_x, min_y, max_x, max_y
 
-async def call_results_ready(analysis_id: str, api_url):
-    payload = {
-        "analysis_id": analysis_id
-    }
-    print(f"Calling results ready callback for analysis_id: {analysis_id} to URL: {api_url}")
+
+async def call_results_ready(analysis_id: str, api_url: str) -> None:
+    """Asynchroniczne wywołanie zwrotne z informacją o gotowości wyników."""
+    payload = {"analysis_id": analysis_id}
     try:
-        response = requests.post(api_url, json=payload)
-        if response.status_code == 200:
-            print(f"Successfully called results ready callback for analysis_id: {analysis_id}")
-        else:
-            print(f"Error calling results ready callback: {response.status_code} - {response.text}")
+        async with aiohttp.ClientSession() as session:
+            async with session.post(api_url, json=payload) as response:
+                if response.status == 200:
+                    logger.info(f"Successfully called results ready callback for analysis_id: {analysis_id}")
+                else:
+                    logger.error(f"Error calling results ready callback: {response.status} - {await response.text()}")
     except Exception as e:
-        print(f"Exception during calling results ready callback: {str(e)}")
+        logger.error(f"Exception during calling results ready callback: {str(e)}")
+
+
+def create_mask_for_image(
+        input_image_path: str,
+        input_json_path: str,
+        output_file_path: str,
+        binary_mask: bool = False
+) -> Tuple[np.ndarray, int, int]:
+    """Tworzy maskę dla obrazu na podstawie pliku JSON z regionem."""
+    if not Path(input_image_path).exists():
+        raise FileNotFoundError(f"No image found at {input_image_path}")
+
+    wsi_reader = WSIReader.open(input_img=input_image_path)
+    original_image = wsi_reader.slide_thumbnail(resolution=1, units="power")
+
+    with open(input_json_path, 'r') as file:
+        data = json.load(file)
+
+    coordinates = data['features'][0]['geometry']['coordinates']
+    min_x, min_y, max_x, max_y = calculate_bounding_box(coordinates)
+
+    cropped_image = original_image[min_y:max_y, min_x:max_x]
+
+    if cropped_image.shape[2] == 3:
+        cropped_image = cv2.cvtColor(cropped_image, cv2.COLOR_BGR2BGRA)
+
+    # Zapisz jako PNG
+    output_file_path = str(Path(output_file_path).with_suffix('.png'))
+    cv2.imwrite(output_file_path, cropped_image)
+
+    return cropped_image, min_x, min_y
+
+
+def cut_mask_from_array(
+        image_array: np.ndarray,
+        json_path: str,
+        min_x: int,
+        min_y: int,
+        save_path: str = None
+) -> np.ndarray:
+    """Wycina maskę z tablicy obrazu na podstawie współrzędnych z pliku JSON."""
+    with open(json_path, 'r') as file:
+        data = json.load(file)
+
+    coordinates = data['features'][0]['geometry']['coordinates']
+    if isinstance(coordinates[0][0], list):
+        coordinates = coordinates[0]
+
+    adjusted_triangle = np.array([
+        (int(coord[0]) - min_x, int(coord[1]) - min_y)
+        for coord in coordinates
+    ], dtype=np.int32)
+
+    mask = np.zeros(image_array.shape[:2], dtype=np.uint8)
+    cv2.fillPoly(mask, [adjusted_triangle], 255)
+
+    result = cv2.bitwise_and(image_array, image_array, mask=mask)
+
+    if save_path:
+        save_path = str(Path(save_path).with_suffix('.png'))
+        cv2.imwrite(save_path, result)
+
+    return result
+
 
 @celery_app.task(bind=True, name='tasks.perform_analysis')
 def perform_analysis(self, svs_path: str, analysis_type: int, analysis_parameters: dict):
+    """Główne zadanie Celery wykonujące analizę obrazu."""
     analysis_id = self.request.id
-    print(f"Started analysis: {analysis_id}")
+    logger.info(f"Started analysis: {analysis_id}")
 
+    # Konfiguracja
     on_gpu = os.getenv('ON_GPU', 'false').lower() in ['true', '1', 't', 'y', 'yes']
-    print(f"Using GPU: {on_gpu}")
     api_url = os.getenv("results_ready_callback_url")
-    print(f"Callback URL: {api_url}")
+    logger.info(f"Using GPU: {on_gpu}")
+    logger.info(f"Callback URL: {api_url}")
 
-    analysis_dir = "analysis"
-    results_dir = "/RESULTS"
+    # Przygotowanie katalogów
+    analysis_dir = Path("analysis")
+    results_dir = Path("/RESULTS")
 
-    analysis_folder = os.path.join(analysis_dir, analysis_id)
-    results_folder = os.path.join(results_dir, analysis_id)
-    os.makedirs(analysis_folder, exist_ok=True)
-    os.makedirs(results_folder, exist_ok=True)
+    analysis_folder = analysis_dir / analysis_id
+    results_folder = results_dir / analysis_id
 
-    mask_save_path = os.path.join(analysis_folder, "mask.tif")
-    save_path = os.path.join(analysis_folder, "sample.tif")
-    json_file_path = os.path.join(results_folder, f"{analysis_id}.json")
+    analysis_folder.mkdir(parents=True, exist_ok=True)
+    results_folder.mkdir(parents=True, exist_ok=True)
 
-    # Load or create JSON file
+    # Ścieżki plików
+    mask_save_path = analysis_folder / "mask.png"
+    save_path = analysis_folder / "sample.png"
+    json_file_path = results_folder / f"{analysis_id}.json"
+
+    # Inicjalizacja lub wczytanie pliku JSON
     try:
         with open(json_file_path, 'r') as file:
             json_data = json.load(file)
-    except IOError:
+    except (FileNotFoundError, json.JSONDecodeError):
         json_data = {
             "analysis_id": analysis_id,
             "svs_path": svs_path,
@@ -73,95 +149,87 @@ def perform_analysis(self, svs_path: str, analysis_type: int, analysis_parameter
             "region_json_path": analysis_parameters['analysis_region_json'],
             "is_normalized": analysis_parameters['is_normalized'],
             "status": "in_process",
-            "result_json_path": json_file_path,
+            "result_json_path": str(json_file_path),
         }
 
-    with open(json_file_path, 'w') as file:
-        json_data["status"] = "in_process"
-        json.dump(json_data, file)
-
     try:
+        # Zapisz status początkowy
+        json_data["status"] = "in_process"
+        with open(json_file_path, 'w') as file:
+            json.dump(json_data, file)
+
         start_time = time.time()
-        print(f"Creating mask for image: {svs_path}")
-        result, min_x, min_y = create_mask_for_image(svs_path, analysis_parameters['analysis_region_json'], mask_save_path)
-        print(f"Creating prediction")
-        prediction = engine.make_prediction(svs_path=svs_path, location=[min_x, min_y], on_gpu=on_gpu, size=[result.shape[1], result.shape[0]], save_path=save_path, save_dir=analysis_folder)
-        print(f"Cutting mask from prediction")
-        triangle = cut_mask_from_array(prediction, analysis_parameters['analysis_region_json'], min_x, min_y)
+
+        # Tworzenie maski dla obrazu
+        logger.info(f"Creating mask for image: {svs_path}")
+        result, min_x, min_y = create_mask_for_image(
+            svs_path,
+            analysis_parameters['analysis_region_json'],
+            str(mask_save_path)
+        )
+
+        # Wykonanie predykcji
+        logger.info("Creating prediction")
+        prediction = engine.make_prediction(
+            svs_path=svs_path,
+            location=[min_x, min_y],
+            size=[result.shape[1], result.shape[0]],
+            save_path=str(save_path),
+            save_dir=str(analysis_folder),
+            on_gpu=on_gpu
+        )
+
+        # Wycinanie maski z predykcji
+        logger.info("Cutting mask from prediction")
+        triangle = cut_mask_from_array(
+            prediction,
+            analysis_parameters['analysis_region_json'],
+            min_x,
+            min_y
+        )
+
         end_time = time.time()
         prediction_time = end_time - start_time
         json_data["prediction_time"] = prediction_time
 
+        # Nakładanie predykcji na obraz
         start_time = time.time()
-        print(f"Overlaying prediction on image")
-        engine.overlay_tif_with_pred(svs_path=svs_path, overlay=triangle, save_path=results_folder, location=[min_x, min_y])
+        logger.info("Overlaying prediction on image")
+        result_path = engine.overlay_png_with_pred(
+            svs_path=svs_path,
+            overlay=triangle,
+            save_path=str(results_folder),
+            location=[min_x, min_y]
+        )
+
         end_time = time.time()
         overlay_time = end_time - start_time
-        json_data["overlay_time"] = overlay_time
-        json_data["status"] = "finished"
-        json_data["result_image_path"] = f"{results_folder}/result.tif"
+
+        # Aktualizacja danych JSON
+        json_data.update({
+            "overlay_time": overlay_time,
+            "status": "finished",
+            "result_image_path": result_path
+        })
+
     except Exception as e:
-        json_data["status"] = "error"
-        json_data["status_message"] = str(e)
+        logger.error(f"Error during analysis: {str(e)}")
+        json_data.update({
+            "status": "error",
+            "error_message": str(e)
+        })
+
     finally:
+        # Zapisz końcowy status
         with open(json_file_path, 'w') as file:
             json.dump(json_data, file)
-        # Call resultsReady service
+
+        # Wywołaj callback
         try:
-            print(f"Attempting to call results ready for analysis_id: {analysis_id}")
+            logger.info(f"Calling results ready callback for analysis_id: {analysis_id}")
             asyncio.run(call_results_ready(analysis_id, api_url))
         except Exception as e:
-            print(f"Error while calling call_results_ready: {str(e)}")
-    print(f"Analysis completed: {analysis_id}")
+            logger.error(f"Error in callback: {str(e)}")
 
-def create_mask_for_image(input_image_path, input_json_path, output_file_path, binary_mask=False):
-    if not os.path.exists(input_image_path):
-        raise FileNotFoundError(f"No image found at {input_image_path}")
-
-    reader = WSIReader.open(input_image_path, power=1)
-    original_image = reader.slide_thumbnail(resolution=1, units="power")
-    if original_image.shape[2] == 3:
-        original_image = cv2.cvtColor(original_image, cv2.COLOR_BGR2BGRA)
-
-    with open(input_json_path, 'r') as file:
-        data = json.load(file)
-
-    coordinates = data['features'][0]['geometry']['coordinates']
-    min_x, min_y, max_x, max_y = calculate_bounding_box(coordinates)
-    cropped_image = original_image[min_y:max_y, min_x:max_x]
-
-    # Ensure the array is C-contiguous
-    cropped_image = np.ascontiguousarray(cropped_image)
-
-    # Save as TIFF
-    cropped_image_vips = pyvips.Image.new_from_memory(cropped_image.data, cropped_image.shape[1], cropped_image.shape[0], cropped_image.shape[2], 'uchar')
-    cropped_image_vips.write_to_file(output_file_path.replace('.jpg', '.tif'), tile=True, compression="jpeg")
-
-    return cropped_image, min_x, min_y
-
-def cut_mask_from_array(image_array, json_path, min_x, min_y, save_path=None):
-    with open(json_path, 'r') as file:
-        data = json.load(file)
-
-    coordinates = data['features'][0]['geometry']['coordinates']
-    if isinstance(coordinates[0][0], list):
-        coordinates = coordinates[0]
-    adjusted_triangle = [(int(coord[0]) - min_x, int(coord[1]) - min_y) for coord in coordinates]
-
-    mask = np.zeros(image_array.shape[:2], dtype=np.uint8)
-    cv2.fillPoly(mask, [np.array(adjusted_triangle)], 255)
-
-    # Convert mask to 3 channels if necessary
-    if image_array.shape[2] == 3:
-        mask = cv2.cvtColor(mask, cv2.COLOR_GRAY2BGR)
-
-    result = cv2.bitwise_and(image_array, image_array, mask=mask)
-    if save_path:
-        # Ensure the array is C-contiguous
-        result = np.ascontiguousarray(result)
-
-        # Save as TIFF
-        result_vips = pyvips.Image.new_from_memory(result.data, result.shape[1], result.shape[0], result.shape[2] if result.ndim == 3 else 1, 'uchar')
-        result_vips.write_to_file(save_path.replace('.jpg', '.tif'), tile=True, compression="jpeg")
-
-    return result
+    logger.info(f"Analysis completed: {analysis_id}")
+    return json_data

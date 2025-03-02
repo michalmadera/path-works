@@ -34,7 +34,10 @@ COPY start_celery.sh ./start_celery.sh
 RUN python3.10 -m pip install --upgrade pip
 
 # Instalacja PyTorch z obsługą CUDA
-RUN python3.10 -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+RUN python3.10 -m pip install --no-cache-dir torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+
+# Instalacja Redis - dodane, aby rozwiązać problem z 'NoneType' object has no attribute 'Redis'
+RUN python3.10 -m pip install --no-cache-dir redis>=4.5.0
 
 # Instalacja pozostałych zależności
 RUN python3.10 -m pip install --no-cache-dir -r requirements.txt --default-timeout=100 future
