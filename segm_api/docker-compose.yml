@@ -16,6 +16,10 @@ services:
       - REDIS_URL=redis://redis:6379/0
       - ON_GPU=${ON_GPU}
       - results_ready_callback_url=${results_ready_callback_url}
+      - CUDA_VISIBLE_DEVICES=0
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      - NVIDIA_DISABLE_REQUIRE=true
     shm_size: ${SHM_SIZE}
     depends_on:
       - redis
@@ -26,6 +30,13 @@ services:
       dockerfile: Dockerfile.celery
     container_name: celery_worker
     image: jkuzn/segm_api-celery_worker:latest
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
     volumes:
       - ${DATA_VOLUME}:/DATA
       - ${RESULTS_VOLUME}:/RESULTS
@@ -35,6 +46,10 @@ services:
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
       - ON_GPU=${ON_GPU}
       - results_ready_callback_url=${results_ready_callback_url}
+      - CUDA_VISIBLE_DEVICES=0
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      - NVIDIA_DISABLE_REQUIRE=true
     mem_limit: 60G
     memswap_limit: 76G
     shm_size: 32G
