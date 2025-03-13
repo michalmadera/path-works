@@ -48,7 +48,8 @@ def semantic_seg_engine(
         msk_paths: list[str],
         save_dir: str,
         mode: str,
-        preproc_func: Callable | None = None,
+        on_gpu: bool,
+        preproc_func: Callable | None = None
 ) -> list:
     bcc_segmentor = SemanticSegmentor(
         pretrained_model="fcn_resnet50_unet-bcss",
@@ -71,7 +72,7 @@ def semantic_seg_engine(
         patch_output_shape=[512, 512],
         stride_shape=[128, 128],
         crash_on_exception=True,
-        device=DEVICE  # Use device parameter instead of on_gpu
+        on_gpu=on_gpu
     )
     return output
 
@@ -88,41 +89,54 @@ def process_region(svs_path: str, location: list[int], size: list[int], level: i
 
     return sample
 
-def make_prediction(svs_path: str, location: list[int], size: list[int], save_dir: str, level: int = 0) -> Dict[str, np.ndarray]:
 
+def make_prediction(svs_path: str, location: list[int], size: list[int], save_dir: str, on_gpu: bool, level: int = 0) -> Dict[
+    str, np.ndarray]:
+    import os
     import tempfile
+
+    os.makedirs(save_dir, exist_ok=True)
+
+    sample = process_region(svs_path=svs_path, location=location, level=level, size=size)
+
     with tempfile.TemporaryDirectory() as temp_dir:
-        sample = process_region(svs_path=svs_path, location=location, level=level, size=size)
-
-        temp_sample_path = os.path.join(temp_dir, "temp_sample.tif")
-        temp_img = pyvips.Image.new_from_memory(sample.data, sample.shape[1], sample.shape[0], sample.shape[2], 'uchar')
-        temp_img.write_to_file(temp_sample_path, tile=False, compression="jpeg", Q=70)
-
+        temp_img_path = os.path.join(temp_dir, "sample.png")
+        cv2.imwrite(temp_img_path, sample)
         output_save_dir = os.path.join(temp_dir, "output")
+
         output_list = semantic_seg_engine(
-            wsi_paths=[temp_sample_path],
+            wsi_paths=[temp_img_path],
             msk_paths=None,
             save_dir=output_save_dir,
-            mode="tile"
+            mode="tile",
+            on_gpu=on_gpu
         )
 
-        logger.info(
-            "Prediction method output is: %s, %s",
-            output_list[0][0],
-            output_list[0][1],
-        )
-        wsi_prediction_raw = np.load(
-            output_list[0][1] + ".raw.0.npy",
-        )
-
-        wsi_prediction = np.argmax(
-            wsi_prediction_raw,
-            axis=-1,
-        )
+        wsi_prediction_raw = np.load(output_list[0][1] + ".raw.0.npy")
+        wsi_prediction = np.argmax(wsi_prediction_raw, axis=-1)
 
         class_masks = {}
-        labels = ["Tumour", "Stroma", "Inflamatory", "Necrosis", "Others"]
+        labels = ["Tumour", "Stroma", "Inflammatory", "Necrosis", "Others"]
+
         for i, label in enumerate(labels):
-            class_masks[label] = (wsi_prediction == i).astype(np.uint8) * 255
+            mask = (wsi_prediction == i).astype(np.uint8) * 255
+            class_masks[label] = mask
+
+            rgba_mask = np.zeros((mask.shape[0], mask.shape[1], 4), dtype=np.uint8)
+            if label == "Tumour":
+                rgba_mask[..., 0] = 255
+            elif label == "Stroma":
+                rgba_mask[..., 1] = 255
+            elif label == "Inflammatory":
+                rgba_mask[..., 2] = 255
+            elif label == "Necrosis":
+                rgba_mask[..., 0] = rgba_mask[..., 1] = 255
+            else:
+                rgba_mask[..., 0] = rgba_mask[..., 1] = rgba_mask[..., 2] = 128
+
+            rgba_mask[..., 3] = mask
+
+            png_path = os.path.join(save_dir, f"{label.lower()}_mask.png")
+            cv2.imwrite(png_path, rgba_mask)
 
     return class_masks

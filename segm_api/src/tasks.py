@@ -58,7 +58,7 @@ def perform_analysis(self, svs_path: str, analysis_type: int, analysis_parameter
     results_folder = os.path.join(results_dir, analysis_id)
     os.makedirs(analysis_folder, exist_ok=True)
     os.makedirs(results_folder, exist_ok=True)
-
+    on_gpu = os.getenv('ON_GPU', 'false').lower() in ['true', '1', 't', 'y', 'yes']
     json_file_path = os.path.join(results_folder, f"{analysis_id}.json")
 
     try:
@@ -100,7 +100,8 @@ def perform_analysis(self, svs_path: str, analysis_type: int, analysis_parameter
             svs_path=svs_path,
             location=[min_x, min_y],
             size=[region_width, region_height],
-            save_dir=analysis_folder
+            save_dir=results_folder,
+            on_gpu=on_gpu
         )
 
         end_time = time.time()
@@ -108,6 +109,8 @@ def perform_analysis(self, svs_path: str, analysis_type: int, analysis_parameter
         json_data["prediction_time"] = prediction_time
 
         mask_paths = {}
+        png_mask_paths = {}
+
         for class_name, mask in masks.items():
             if isinstance(coordinates[0][0], list):
                 adjusted_coordinates = [(int(coord[0]) - min_x, int(coord[1]) - min_y) for coord in coordinates[0]]
@@ -119,11 +122,31 @@ def perform_analysis(self, svs_path: str, analysis_type: int, analysis_parameter
 
             masked_result = cv2.bitwise_and(mask, poly_mask)
 
-            mask_path = os.path.join(results_folder, f"{class_name.lower()}_mask.npy")
-            np.save(mask_path, masked_result)
-            mask_paths[class_name] = mask_path
+            npy_path = os.path.join(results_folder, f"{class_name.lower()}_mask.npy")
+            np.save(npy_path, masked_result)
+            mask_paths[class_name] = npy_path
+
+            png_path = os.path.join(results_folder, f"{class_name.lower()}_mask.png")
+
+            rgba_mask = np.zeros((masked_result.shape[0], masked_result.shape[1], 4), dtype=np.uint8)
+            if class_name == "Tumour":
+                rgba_mask[..., 0] = 255
+            elif class_name == "Stroma":
+                rgba_mask[..., 1] = 255
+            elif class_name == "Inflammatory":
+                rgba_mask[..., 2] = 255
+            elif class_name == "Necrosis":
+                rgba_mask[..., 0] = rgba_mask[..., 1] = 255
+            else:
+                rgba_mask[..., 0] = rgba_mask[..., 1] = rgba_mask[..., 2] = 128
+
+            rgba_mask[..., 3] = masked_result
+
+            cv2.imwrite(png_path, rgba_mask)
+            png_mask_paths[class_name] = png_path
 
         json_data["mask_paths"] = mask_paths
+        json_data["png_mask_paths"] = png_mask_paths
         json_data["status"] = "finished"
 
     except Exception as e:
